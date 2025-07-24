@@ -60,7 +60,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   try {
     // Récupérer les données du body de la requête
     const body = await request.json();
-    console.log("Body reçu:", body, "Type de products:", typeof body.products, "Taille:", Array.isArray(body.products) ? body.products.length : "non-array");
     const { products } = body;
 
     if (!products || !Array.isArray(products)) {
@@ -141,7 +140,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
 
         const result = await response.json();
-        console.log("Réponse Shopify productUpdate:", JSON.stringify(result, null, 2));
         let userErrors = [];
         let product = null;
         if (productData.id) {
