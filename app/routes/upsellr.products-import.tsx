@@ -57,136 +57,103 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     data: { shopifyToken: token }
   });
 
+  // Lire le body JSON
+  let body: any;
+  const shopDomain = shopSettings.shop;
+  const adminUrl = `https://${shopDomain}/admin/api/2024-01/graphql.json`;
+
   try {
-    // Récupérer les données du body de la requête
-    const body = await request.json();
-    const { products } = body;
+    body = await request.json();
+  } catch (err) {
+    return json({ success: false, error: "Body JSON invalide" }, { status: 400 });
+  }
 
-    if (!products || !Array.isArray(products)) {
-      return json(
-        { 
-          success: false, 
-          error: "Données invalides. Le body doit contenir un tableau 'products'" 
-        },
-        { status: 400 }
-      );
-    }
+  if (!body.products || !Array.isArray(body.products)) {
+    return json({ success: false, error: "Le body doit contenir un tableau 'products'" }, { status: 400 });
+  }
 
-    const shopDomain = shopSettings.shop;
-    const adminUrl = `https://${shopDomain}/admin/api/2024-01/graphql.json`;
+  // Créer les produits en base
+  const created: any[] = [];
+  for (const prod of body.products) {
+    if (!prod.title) continue;
 
-    const results = {
-      success: [] as any[],
-      errors: [] as any[]
+    // Préparer l'input pour la mutation productCreate (title + description uniquement)
+    const input: any = {
+      title: prod.title,
     };
-
-    // Traiter chaque produit
-    for (const productData of products) {
-      try {
-        let mutation, variables;
-        if (productData.id) {
-          // PATCH (update)
-          mutation = `
-            mutation productUpdate($input: ProductInput!) {
-              productUpdate(input: $input) {
-                product { id title handle vendor productType tags descriptionHtml status }
-                userErrors { field message code }
-              }
-            }
-          `;
-          // Construit dynamiquement l'objet input avec uniquement les champs fournis
-          const input: any = { id: productData.id };
-          if (productData.title) input.title = productData.title;
-          if (productData.description) input.descriptionHtml = productData.description;
-          if (productData.vendor) input.vendor = productData.vendor;
-          if (productData.productType) input.productType = productData.productType;
-          if (productData.tags) input.tags = productData.tags;
-          if (productData.status) input.status = productData.status;
-          // Ajoute d'autres champs si besoin
-          variables = { input };
-        } else {
-          // CREATE
-          mutation = `
-            mutation productCreate($input: ProductInput!) {
-              productCreate(input: $input) {
-                product { id title handle }
-                userErrors { field message code }
-              }
-            }
-          `;
-          variables = {
-            input: {
-              title: productData.title,
-              descriptionHtml: productData.description || "",
-              vendor: productData.vendor || "",
-              productType: productData.productType || "",
-              tags: productData.tags || [],
-              status: productData.status || "ACTIVE"
-            }
-          };
-        }
-
-        const response = await fetch(adminUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Shopify-Access-Token': token || '',
-          },
-          body: JSON.stringify({ query: mutation, variables })
-        });
-
-        if (!response.ok) {
-          throw new Error(`Shopify API error: ${response.status}`);
-        }
-
-        const result = await response.json();
-        let userErrors = [];
-        let product = null;
-        if (productData.id) {
-          userErrors = result.data?.productUpdate?.userErrors || [];
-          product = result.data?.productUpdate?.product;
-        } else {
-          userErrors = result.data?.productCreate?.userErrors || [];
-          product = result.data?.productCreate?.product;
-        }
-        if (userErrors.length > 0) {
-          results.errors.push({
-            product: productData.title || "Produit inconnu",
-            errors: userErrors
-          });
-        } else if (product) {
-          results.success.push({
-            product,
-            originalData: productData
-          });
-        }
-
-      } catch (error) {
-        results.errors.push({
-          product: productData.title || "Produit inconnu",
-          errors: [{ message: error instanceof Error ? error.message : "Erreur inconnue" }]
-        });
-      }
+    if (prod.description) input.descriptionHtml = prod.description;
+    if (prod.status) input.status = prod.status;
+    if (prod.vendor) input.vendor = prod.vendor;
+    if (prod.productType) input.productType = prod.productType;
+    if (prod.tags) input.tags = Array.isArray(prod.tags) ? prod.tags : [prod.tags];
+    if (prod.images && Array.isArray(prod.images) && prod.images.length > 0) {
+      input.images = prod.images.map((url: string) => ({ src: url }));
     }
 
-    return json({
-      success: true,
-      message: `Import terminé. ${results.success.length} produits créés, ${results.errors.length} erreurs.`,
-      results
-    }, {
+    const mutation = `
+      mutation productCreate($input: ProductInput!) {
+        productCreate(input: $input) {
+          product { id title descriptionHtml }
+          userErrors { field message }
+        }
+      }
+    `;
+    const variables = { input };
+
+    const resp = await fetch(adminUrl, {
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Cache-Control': 'no-cache'
-      }
-    });
-
-  } catch (error) {
-    return json(
-      { 
-        success: false, 
-        error: `Erreur lors de l'import des produits: ${error instanceof Error ? error.message : 'Unknown error'}` 
+        'X-Shopify-Access-Token': token,
       },
-      { status: 500 }
-    );
+      body: JSON.stringify({ query: mutation, variables }),
+    });
+    const data = await resp.json();
+    const createdProduct = data.data?.productCreate?.product;
+    const imageErrors = (data.data?.productCreate?.userErrors || []).filter((err: any) => (err.field || []).includes('images'));
+    if (createdProduct) {
+      // Ajouter le produit aux collections si besoin
+      let collectionErrors: any[] = [];
+      if (prod.collections && Array.isArray(prod.collections) && prod.collections.length > 0) {
+        for (const collectionId of prod.collections) {
+          const addToCollectionMutation = `
+            mutation addProductToCollection($id: ID!, $productIds: [ID!]!) {
+              collectionAddProducts(id: $id, productIds: $productIds) {
+                userErrors { field message }
+              }
+            }
+          `;
+          const resp = await fetch(adminUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Shopify-Access-Token': token,
+            },
+            body: JSON.stringify({
+              query: addToCollectionMutation,
+              variables: { id: collectionId, productIds: [createdProduct.id] },
+            }),
+          });
+          const data = await resp.json();
+          // Log et collecte les erreurs éventuelles
+          if (data.errors || data.data?.collectionAddProducts?.userErrors?.length) {
+            collectionErrors.push({
+              collectionId,
+              errors: data.errors,
+              userErrors: data.data?.collectionAddProducts?.userErrors
+            });
+          }
+        }
+      }
+      created.push({ ...createdProduct, collectionErrors, imageErrors });
+    }
   }
+
+  return json({
+    success: true,
+    created_count: created.length,
+    created_products: created,
+  });
+
+
 };
