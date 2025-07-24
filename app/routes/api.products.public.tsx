@@ -163,7 +163,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return json(
       { 
         success: false, 
-        error: `Erreur lors de la récupération des produits: ${error.message}` 
+        error: `Erreur lors de la récupération des produits: ${error instanceof Error ? error.message : 'Unknown error'}` 
       },
       { status: 500 }
     );
