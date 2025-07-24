@@ -30,3 +30,15 @@ model Session {
   collaborator  Boolean?  @default(false)
   emailVerified Boolean?  @default(false)
 }
+
+model ShopSetting {
+  id            String @id @default(cuid())
+  shop          String @unique
+  shopifyToken  String? @unique
+  upsellrApiKey String?
+  upsellrApiUrl String?
+  lastSync      DateTime?
+  productsSynced Int @default(0)
+  productsImported Int @default(0)
+}
+

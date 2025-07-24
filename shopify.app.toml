@@ -3,7 +3,7 @@
 client_id = "2022322134db5403bdd40384bf020a5c"
 name = "upsellr-connector"
 handle = "upsellr-connector-1"
-application_url = "https://benchmark-cancer-insects-dealers.trycloudflare.com"
+application_url = "https://easter-sole-suzuki-handled.trycloudflare.com"
 embedded = true
 
 [build]
@@ -26,7 +26,7 @@ api_version = "2025-07"
 scopes = "write_products"
 
 [auth]
-redirect_urls = ["https://benchmark-cancer-insects-dealers.trycloudflare.com/auth/callback", "https://benchmark-cancer-insects-dealers.trycloudflare.com/auth/shopify/callback", "https://benchmark-cancer-insects-dealers.trycloudflare.com/api/auth/callback"]
+redirect_urls = ["https://easter-sole-suzuki-handled.trycloudflare.com/auth/callback", "https://easter-sole-suzuki-handled.trycloudflare.com/auth/shopify/callback", "https://easter-sole-suzuki-handled.trycloudflare.com/api/auth/callback"]
 
 [pos]
 embedded = false
