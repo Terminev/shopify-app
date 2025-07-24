@@ -114,103 +114,115 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const page = Math.max(1, parseInt(params.get('page') || '1', 10));
     const pageSize = Math.max(1, Math.min(100, parseInt(params.get('page_size') || '100', 10)));
 
-    const productsQuery = `
-      query getAllProducts($first: Int!, $query: String) {
-        products(first: $first, query: $query) {
-          edges {
-            node {
-              id
-              title
-              handle
-              description
-              status
-              totalInventory
-              createdAt
-              updatedAt
-              vendor
-              productType
-              tags
-              variants(first: 100) {
-                edges {
-                  node {
+    // Fonction pour récupérer tous les produits avec pagination GraphQL
+    async function getAllProductsWithPagination(query: string | undefined) {
+      let allProducts: any[] = [];
+      let hasNextPage = true;
+      let cursor: string | null = null;
+
+      while (hasNextPage) {
+        const productsQuery = `
+          query getAllProducts($first: Int!, $after: String, $query: String) {
+            products(first: $first, after: $after, query: $query) {
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
+              edges {
+                node {
+                  id
+                  title
+                  handle
+                  description
+                  status
+                  totalInventory
+                  createdAt
+                  updatedAt
+                  vendor
+                  productType
+                  tags
+                  variants(first: 2) {
+                    edges {
+                      node {
+                        id
+                        title
+                        sku
+                        price
+                        compareAtPrice
+                        inventoryQuantity
+                        barcode
+                        taxable
+                      }
+                    }
+                  }
+                  images(first: 50) {
+                    edges {
+                      node {
+                        id
+                        url
+                        altText
+                        width
+                        height
+                      }
+                    }
+                  }
+                  collections(first: 50) {
+                    edges {
+                      node {
+                        id
+                        title
+                        handle
+                      }
+                    }
+                  }
+                  category {
                     id
-                    title
-                    sku
-                    price
-                    compareAtPrice
-                    inventoryQuantity
-                    barcode
-                    taxable
+                    name
                   }
                 }
-              }
-              images(first: 50) {
-                edges {
-                  node {
-                    id
-                    url
-                    altText
-                    width
-                    height
-                  }
-                }
-              }
-              collections(first: 50) {
-                edges {
-                  node {
-                    id
-                    title
-                    handle
-                  }
-                }
-              }
-              category {
-                id
-                name
               }
             }
           }
+        `;
+
+        const response: Response = await fetch(adminUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Shopify-Access-Token': token || '',
+          },
+          body: JSON.stringify({
+            query: productsQuery,
+            variables: { 
+              first: 100, // Limite max de Shopify
+              after: cursor,
+              query: query || undefined 
+            }
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Shopify API error: ${response.status}`);
         }
+
+        const productsData: any = await response.json();
+        
+        if (!productsData.data || !productsData.data.products) {
+          throw new Error("Réponse Shopify invalide");
+        }
+
+        const products = productsData.data.products.edges.map((edge: any) => edge.node);
+        allProducts.push(...products);
+
+        hasNextPage = productsData.data.products.pageInfo.hasNextPage;
+        cursor = productsData.data.products.pageInfo.endCursor;
       }
-    `;
 
-    const response = await fetch(adminUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Shopify-Access-Token': token,
-      },
-      body: JSON.stringify({
-        query: productsQuery,
-        variables: { first: page * pageSize, query: shopifyQuery || undefined }
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(`Shopify API error: ${response.status}`);
+      return allProducts;
     }
 
-    const productsData = await response.json();
-    
-    // Debug: voir la réponse exacte
-    console.log('Shopify API Response:', JSON.stringify(productsData, null, 2));
-    
-    if (!productsData.data || !productsData.data.products) {
-      return json(
-        { 
-          success: false, 
-          error: "Réponse Shopify invalide",
-          debug: {
-            response: productsData,
-            shopDomain: shopDomain,
-            token: token.substring(0, 10) + "..."
-          }
-        },
-        { status: 500 }
-      );
-    }
-
-    let products = productsData.data.products.edges.map((edge: any) => edge.node);
+    // Récupérer tous les produits
+    let products = await getAllProductsWithPagination(shopifyQuery || undefined);
 
     // --- FILTRES COLLECTIONS côté Node ---
     if (collectionsIncluded) {
@@ -245,37 +257,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
     // --- FIN FILTRES CATEGORIES ---
 
-    // Faire une requête GQL pour obtenir le vrai total des produits correspondant à la recherche (pour la pagination)
-    let totalProductsRest = products.length;
-    try {
-      const countQuery = `
-        query getProductsCount($query: String) {
-          productsCount(query: $query)
-        }
-      `;
-      const countResponse = await fetch(adminUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Shopify-Access-Token': token,
-        },
-        body: JSON.stringify({
-          query: countQuery,
-          variables: { query: shopifyQuery || undefined }
-        })
-      });
-      if (countResponse.ok) {
-        const countData = await countResponse.json();
-        if (countData.data && typeof countData.data.productsCount === 'number') {
-          totalProductsRest = countData.data.productsCount;
-        }
-      }
-    } catch (err) {
-      // En cas d'erreur, on garde le fallback sur products.length
-      console.warn("Erreur lors de la récupération du total des produits:", err);
-    }
-
+    const totalProductsRest = products.length;
     const pageCount = Math.max(1, Math.ceil(totalProductsRest / pageSize));
+    
     // Découper les produits pour la page demandée
     const paginatedProducts = products.slice((page - 1) * pageSize, page * pageSize);
 

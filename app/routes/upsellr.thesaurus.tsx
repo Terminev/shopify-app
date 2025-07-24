@@ -69,7 +69,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const brands = Array.from(vendorSet).map((vendor, idx) => ({
     value: String(idx + 1),
     label: vendor,
-  }));
+  }));  
 
   // Extraire les catégories (productType distincts)
   const categorySet = new Set<string>();
