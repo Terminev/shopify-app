@@ -9,7 +9,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const productsResponse = await admin.graphql(
     `#graphql
       query getProductsCount {
-        products {
+        products(first: 250) {
           edges {
             node {
               id
