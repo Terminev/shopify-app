@@ -13,17 +13,24 @@ import {
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { json } from "@remix-run/node";
+import { prisma } from "../db/index.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
-  
-  // Utiliser l'access token Shopify natif
   const shopifyAccessToken = session.accessToken;
-  
-  // Récupérer la clé API depuis la configuration
-  const shopifyApiKey = "01268dbdf25ab38ac2fac9c07d8fcc0a"; // client_id from shopify.app.toml
 
-  // Récupérer les produits Shopify (pour la suite, mais pas affiché ici)
+  const url = new URL(request.url);
+  const shop = url.searchParams.get("shop");
+
+  let shopifyApiKey: string | null = null;
+  if (shop) {
+    const shopSetting = await prisma.shopSetting.findUnique({
+      where: { shop },
+      select: { shopifyToken: true },
+    });
+    shopifyApiKey = shopSetting?.shopifyToken ?? null;
+  }
+
   const productsResponse = await admin.graphql(
     `#graphql
       query getProducts($first: Int!) {
