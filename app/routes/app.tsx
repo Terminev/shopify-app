@@ -5,14 +5,16 @@ import { authenticate } from "../shopify.server";
 import { AppProvider, Card, Page, TextField, Button, BlockStack } from "@shopify/polaris";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import { useState } from "react";
+import { getOrCreateShopifyToken } from "../db/shop-settings.server";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
+  await getOrCreateShopifyToken(session.shop);
   const shopifyAccessToken = session.accessToken;
   const shopifyApiKey = process.env.SHOPIFY_API_KEY || "";
-  return json({ shopifyAccessToken, shopifyApiKey, shop: session.shop });
+  return json({ shopifyAccessToken, shopifyApiKey });
 };
 
 export default function App() {
