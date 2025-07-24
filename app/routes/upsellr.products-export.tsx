@@ -112,7 +112,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     // Pagination dynamique
     const page = Math.max(1, parseInt(params.get('page') || '1', 10));
-    const pageSize = Math.max(1, Math.min(100, parseInt(params.get('page_size') || '100', 10)));
+    const pageSize = Math.max(1, Math.min(250, parseInt(params.get('page_size') || '250', 10)));
 
     // Fonction pour récupérer tous les produits avec pagination GraphQL
     async function getAllProductsWithPagination(query: string | undefined) {
@@ -141,7 +141,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                   vendor
                   productType
                   tags
-                  variants(first: 2) {
+                  variants(first: 250) {
                     edges {
                       node {
                         id
@@ -155,7 +155,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                       }
                     }
                   }
-                  images(first: 50) {
+                  images(first: 250) {
                     edges {
                       node {
                         id
@@ -166,7 +166,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                       }
                     }
                   }
-                  collections(first: 50) {
+                  collections(first: 250) {
                     edges {
                       node {
                         id
@@ -194,7 +194,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           body: JSON.stringify({
             query: productsQuery,
             variables: { 
-              first: 100, // Limite max de Shopify
+              first: 250, // Limite max de Shopify
               after: cursor,
               query: query || undefined 
             }
