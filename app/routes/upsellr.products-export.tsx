@@ -1,32 +1,15 @@
 import { json } from "@remix-run/node";
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { prisma } from "../db/index.server";
+import { getShopifyAdminFromToken } from "../utils/shopify-auth";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const url = new URL(request.url);
-  const token = url.searchParams.get("token");
+  const shopifyAuth = await getShopifyAdminFromToken(request);
+  if (shopifyAuth.error) {
+    return json({ success: false, error: shopifyAuth.error.message }, { status: shopifyAuth.error.status });
+  }
+  const { token, shopDomain, adminUrl } = shopifyAuth;
   
-  if (!token) {
-    return json(
-      { 
-        success: false, 
-        error: "Token d'authentification requis. Utilisez ?token=VOTRE_TOKEN" 
-      },
-      { status: 401 }
-    );
-  }
-
-  // Vérifier si c'est un token Shopify valide (commence par shpua_)
-  if (!token.startsWith("shpua_")) {
-    return json(
-      { 
-        success: false, 
-        error: "Format de token invalide. Le token doit commencer par 'shpua_'" 
-      },
-      { status: 401 }
-    );
-  }
-
   // Trouver la boutique et mettre à jour le token
   const shopSettings = await prisma.shopSetting.findFirst();
   
@@ -48,11 +31,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   // Récupérer les produits via l'API Shopify Admin
   try {
-    const shopDomain = shopSettings.shop;
-    const adminUrl = `https://${shopDomain}/admin/api/2024-01/graphql.json`;
-
     // --- FILTRES ---
     // Récupérer les paramètres de filtre
+    const url = new URL(request.url);
     const params = url.searchParams;
     // Helper to get array from query params, supporting both ?param=1,2 and ?param[]=1&param[]=2
     const getArrayParam = (param: string) => {

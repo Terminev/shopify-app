@@ -1,27 +1,20 @@
 import { json } from "@remix-run/node";
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { prisma } from "../db/index.server";
+import { getShopifyAdminFromToken } from "../utils/shopify-auth";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const url = new URL(request.url);
-  const token = url.searchParams.get("token");
-
-  if (!token) {
-    return json({ error: "Token d'authentification requis. Utilisez ?token=VOTRE_TOKEN" }, { status: 401 });
+  const shopifyAuth = await getShopifyAdminFromToken(request);
+  if (shopifyAuth.error) {
+    return json({ error: shopifyAuth.error.message }, { status: shopifyAuth.error.status });
   }
-
-  // Vérifier si c'est un token Shopify valide (commence par shpua_)
-  if (!token.startsWith("shpua_")) {
-    return json({ error: "Format de token invalide. Le token doit commencer par 'shpua_'" }, { status: 401 });
-  }
+  const { token, shopDomain, adminUrl } = shopifyAuth;
 
   // Trouver la boutique
   const shopSettings = await prisma.shopSetting.findFirst();
   if (!shopSettings) {
     return json({ error: "Aucune boutique configurée" }, { status: 404 });
   }
-  const shopDomain = shopSettings.shop;
-  const adminUrl = `https://${shopDomain}/admin/api/2024-01/graphql.json`;
 
   // Récupérer les collections
   const collectionsQuery = `

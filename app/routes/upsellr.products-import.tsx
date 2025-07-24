@@ -1,6 +1,7 @@
 import { json } from "@remix-run/node";
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { prisma } from "../db/index.server";
+import { getShopifyAdminFromToken } from "../utils/shopify-auth";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   console.log("==> /upsellr/products-import called");
@@ -9,14 +10,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ success: false, error: "Méthode non autorisée. Utilisez POST." }, { status: 405 });
   }
 
-  const url = new URL(request.url);
-  const token = url.searchParams.get("token");
-  console.log("Token reçu :", token);
-
-  if (!token || !token.startsWith("shpua_")) {
-    console.log("Token invalide ou manquant");
-    return json({ success: false, error: "Token invalide ou manquant" }, { status: 401 });
+  const shopifyAuth = await getShopifyAdminFromToken(request);
+  if (shopifyAuth.error) {
+    return json({ success: false, error: shopifyAuth.error.message }, { status: shopifyAuth.error.status });
   }
+  
+  const { token, shopDomain, adminUrl } = shopifyAuth;
 
   const shopSettings = await prisma.shopSetting.findFirst();
   if (!shopSettings) {
