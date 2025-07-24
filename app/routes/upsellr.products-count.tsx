@@ -1,23 +1,14 @@
 import { json } from "@remix-run/node";
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { prisma } from "../db/index.server";
+import { getShopifyAdminFromToken } from "../utils/shopify-auth";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  // Récupérer le token depuis le header ou l'URL
-  const url = new URL(request.url);
-  const token =
-    request.headers.get("x-shopify-access-token") ||
-    url.searchParams.get("token");
-
-  if (!token) {
-    return json(
-      {
-        success: false, 
-        error: "Token d'authentification requis",
-      },
-      { status: 401 }
-    );
+  const shopifyAuth = await getShopifyAdminFromToken(request);
+  if (shopifyAuth.error) {
+    return json({ success: false, error: shopifyAuth.error.message }, { status: shopifyAuth.error.status });
   }
+  const { token, shopDomain, adminUrl } = shopifyAuth;
 
   // Vérifier que le token existe dans ShopSetting
   const shopSetting = await prisma.shopSetting.findFirst({
@@ -35,7 +26,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   // Appel à l'API Shopify pour compter les produits
-  const adminUrl = `https://${shopSetting.shop}/admin/api/2024-01/graphql.json`;
   const productsQuery = `#graphql\n    query getProductsCount {\n      products(first: 250) {\n        edges {\n          node { id }\n        }\n      }\n    }`;
 
   const response = await fetch(adminUrl, {
