@@ -50,10 +50,73 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   try {
     const shopDomain = shopSettings.shop;
     const adminUrl = `https://${shopDomain}/admin/api/2024-01/graphql.json`;
-    
+
+    // --- FILTRES ---
+    // Récupérer les paramètres de filtre
+    const params = url.searchParams;
+    // Helper to get array from query params, supporting both ?param=1,2 and ?param[]=1&param[]=2
+    const getArrayParam = (param: string) => {
+      // Support for ?param[]=a&param[]=b
+      const arr = params.getAll(`${param}[]`);
+      if (arr.length > 0) {
+        return arr.map((v) => v.trim()).filter(Boolean);
+      }
+      // Fallback for ?param=a,b
+      const val = params.get(param);
+      if (!val) return undefined;
+      return val.split(',').map((v) => v.trim()).filter(Boolean);
+    };
+    // Filtres inclus/exclus
+    const productTypesIncluded = getArrayParam('product_types_included');
+    const productTypesExcluded = getArrayParam('product_types_excluded');
+    const collectionsIncluded = getArrayParam('collections_included');
+    const collectionsExcluded = getArrayParam('collections_excluded');
+    const vendorsIncluded = getArrayParam('vendors_included');
+    const vendorsExcluded = getArrayParam('vendors_excluded');
+    const categoriesIncluded = getArrayParam('categories_included');
+    const categoriesExcluded = getArrayParam('categories_excluded');
+    const createdFrom = params.get('created_from');
+    const createdTo = params.get('created_to');
+    const isActive = params.get('is_active');
+
+    // Construction du paramètre 'query' pour Shopify
+    let shopifyQueryParts: string[] = [];
+    // Catégories (product_type)
+    if (productTypesIncluded) {
+      shopifyQueryParts.push(productTypesIncluded.map((cat) => `product_type:'${cat.replace(/'/g, "\\'")}'`).join(' OR '));
+    }
+    if (productTypesExcluded) {
+      shopifyQueryParts.push(productTypesExcluded.map((cat) => `-product_type:'${cat.replace(/'/g, "\\'")}'`).join(' '));
+    }
+    // Fournisseurs (vendor)
+    if (vendorsIncluded) {
+      shopifyQueryParts.push(vendorsIncluded.map((v) => `vendor:'${v.replace(/'/g, "\\'")}'`).join(' OR '));
+    }
+    if (vendorsExcluded) {
+      shopifyQueryParts.push(vendorsExcluded.map((v) => `-vendor:'${v.replace(/'/g, "\\'")}'`).join(' '));
+    }
+    // Statut actif
+    if (isActive !== null && isActive !== undefined) {
+      if (isActive === 'true') shopifyQueryParts.push(`status:ACTIVE`);
+      if (isActive === 'false') shopifyQueryParts.push(`-status:ACTIVE`);
+    }
+    // Dates de création
+    if (createdFrom) {
+      shopifyQueryParts.push(`created_at:>='${createdFrom}'`);
+    }
+    if (createdTo) {
+      shopifyQueryParts.push(`created_at:<='${createdTo}'`);
+    }
+    const shopifyQuery = shopifyQueryParts.join(' ');
+    // --- FIN FILTRES ---
+
+    // Pagination dynamique
+    const page = Math.max(1, parseInt(params.get('page') || '1', 10));
+    const pageSize = Math.max(1, Math.min(100, parseInt(params.get('page_size') || '100', 10)));
+
     const productsQuery = `
-      query getAllProducts($first: Int!) {
-        products(first: $first) {
+      query getAllProducts($first: Int!, $query: String) {
+        products(first: $first, query: $query) {
           edges {
             node {
               id
@@ -67,7 +130,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
               vendor
               productType
               tags
-              variants(first: 250) {
+              variants(first: 100) {
                 edges {
                   node {
                     id
@@ -101,6 +164,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                   }
                 }
               }
+              category {
+                id
+                name
+              }
             }
           }
         }
@@ -115,7 +182,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       },
       body: JSON.stringify({
         query: productsQuery,
-        variables: { first: 250 }
+        variables: { first: page * pageSize, query: shopifyQuery || undefined }
       })
     });
 
@@ -143,15 +210,83 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       );
     }
 
-    const products = productsData.data.products.edges.map((edge: any) => edge.node);
+    let products = productsData.data.products.edges.map((edge: any) => edge.node);
+
+    // --- FILTRES COLLECTIONS côté Node ---
+    if (collectionsIncluded) {
+      products = products.filter((product: any) => {
+        const productCollections = product.collections?.edges?.map((e: any) => e.node) || [];
+        // On accepte le filtre par handle (nom) ou par id
+        return productCollections.some((c: any) => collectionsIncluded.includes(c.handle) || collectionsIncluded.includes(c.id));
+      });
+    }
+    if (collectionsExcluded) {
+      products = products.filter((product: any) => {
+        const productCollections = product.collections?.edges?.map((e: any) => e.node) || [];
+        return !productCollections.some((c: any) => collectionsExcluded.includes(c.handle) || collectionsExcluded.includes(c.id));
+      });
+    }
+    // --- FIN FILTRES COLLECTIONS ---
+
+    // --- FILTRES CATEGORIES côté Node ---
+    if (categoriesIncluded) {
+      products = products.filter((product: any) => {
+        const catName = product.category?.name;
+        const catId = product.category?.id;
+        return (catName && categoriesIncluded.includes(catName)) || (catId && categoriesIncluded.includes(catId));
+      });
+    }
+    if (categoriesExcluded) {
+      products = products.filter((product: any) => {
+        const catName = product.category?.name;
+        const catId = product.category?.id;
+        return !((catName && categoriesExcluded.includes(catName)) || (catId && categoriesExcluded.includes(catId)));
+      });
+    }
+    // --- FIN FILTRES CATEGORIES ---
+
+    // Faire une requête GQL pour obtenir le vrai total des produits correspondant à la recherche (pour la pagination)
+    let totalProductsRest = products.length;
+    try {
+      const countQuery = `
+        query getProductsCount($query: String) {
+          productsCount(query: $query)
+        }
+      `;
+      const countResponse = await fetch(adminUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Access-Token': token,
+        },
+        body: JSON.stringify({
+          query: countQuery,
+          variables: { query: shopifyQuery || undefined }
+        })
+      });
+      if (countResponse.ok) {
+        const countData = await countResponse.json();
+        if (countData.data && typeof countData.data.productsCount === 'number') {
+          totalProductsRest = countData.data.productsCount;
+        }
+      }
+    } catch (err) {
+      // En cas d'erreur, on garde le fallback sur products.length
+      console.warn("Erreur lors de la récupération du total des produits:", err);
+    }
+
+    const pageCount = Math.max(1, Math.ceil(totalProductsRest / pageSize));
+    // Découper les produits pour la page demandée
+    const paginatedProducts = products.slice((page - 1) * pageSize, page * pageSize);
 
     return json({
-      success: true,
-      message: "Produits récupérés avec succès",
-      shop: shopSettings.shop,
-      count: products.length,
-      products: products,
-      timestamp: new Date().toISOString()
+      stats: {
+        page,
+        page_count: pageCount,
+        page_size: pageSize,
+        total_products: totalProductsRest
+      },
+      products: paginatedProducts
     }, {
       headers: {
         'Content-Type': 'application/json',
