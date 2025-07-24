@@ -39,9 +39,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ success: false, error: "Le body doit contenir un tableau 'products'" }, { status: 400 });
   }
 
-  const shopDomain = shopSettings.shop;
-  const adminUrl = `https://${shopDomain}/admin/api/2024-01/graphql.json`;
-
   const created: any[] = [];
 
   for (const prod of body.products) {
