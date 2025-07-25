@@ -39,10 +39,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ success: false, error: "Le body doit contenir un tableau 'products'" }, { status: 400 });
   }
 
-  const created: any[] = [];
-
+  const results: any[] = [];
   for (const prod of body.products) {
     if (!prod.title && !prod.id) continue;
+
+    const upsellrRawId = prod.upsellr_raw_id ?? null;
 
     const input: any = {
       title: prod.title,
@@ -287,20 +288,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
 
-    if (createdProduct) {
-      created.push({
-        ...createdProduct,
-        creationErrors,
-        imageErrors,
-        appendedImages,
-        collectionErrors,
-      });
+    let status = "ok";
+    let error = null;
+    let shopifyId = createdProduct?.id || null;
+    if (creationErrors && creationErrors.length) {
+      status = "error";
+      error = creationErrors.map(e => e.message).join(", ");
     }
+
+    results.push({
+      status,
+      error,
+      shopify_id: shopifyId,
+      upsellr_raw_id: upsellrRawId
+    });
   }
 
   return json({
-    success: true,
-    created_count: created.length,
-    created_products: created,
+    results
   });
 };
