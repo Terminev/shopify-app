@@ -5,9 +5,6 @@ export async function getShopifyAdminFromToken(request: Request) {
   if (!token) {
     return { error: { status: 401, message: "Token d'authentification requis. Utilisez ?token=VOTRE_TOKEN" } };
   }
-  if (!token.startsWith("shpua_")) {
-    return { error: { status: 401, message: "Format de token invalide. Le token doit commencer par 'shpua_'" } };
-  }
   if (!shopDomain) {
     return { error: { status: 400, message: "Paramètre 'shop' requis dans l'URL (?shop=shopDomain)" } };
   }
