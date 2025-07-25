@@ -1,6 +1,5 @@
 import { json } from "@remix-run/node";
 import type { LoaderFunctionArgs } from "@remix-run/node";
-import { prisma } from "../db/index.server";
 import { getShopifyAdminFromToken } from "../utils/shopify-auth";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -9,21 +8,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return json({ success: false, error: shopifyAuth.error.message }, { status: shopifyAuth.error.status });
   }
   const { token, shopDomain, adminUrl } = shopifyAuth;
-
-  // Vérifier que le token existe dans ShopSetting
-  const shopSetting = await prisma.shopSetting.findFirst({
-    where: { shopifyToken: token },
-  });
-
-  if (!shopSetting) {
-    return json(
-      {
-        success: false,
-        error: "Token invalide",
-      },
-      { status: 403 },
-    );
-  }
 
   // Appel à l'API Shopify pour récupérer les produits (pour extraire brands et catégories)
   const productsQuery = `#graphql\n    query getAllProducts($first: Int!) {\n      products(first: $first) {\n        edges {\n          node {\n            id\n            vendor\n            productType\n          }\n        }\n      }\n    }`;

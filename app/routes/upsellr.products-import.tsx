@@ -1,6 +1,5 @@
 import { json } from "@remix-run/node";
 import type { ActionFunctionArgs } from "@remix-run/node";
-import { prisma } from "../db/index.server";
 import { getShopifyAdminFromToken } from "../utils/shopify-auth";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -16,17 +15,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
   
   const { token, shopDomain, adminUrl } = shopifyAuth;
-
-  const shopSettings = await prisma.shopSetting.findFirst();
-  if (!shopSettings) {
-    console.log("Aucune boutique configurée");
-    return json({ success: false, error: "Aucune boutique configurée" }, { status: 404 });
-  }
-
-  await prisma.shopSetting.update({
-    where: { id: shopSettings.id },
-    data: { shopifyToken: token },
-  });
 
   let body: any;
   try {

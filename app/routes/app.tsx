@@ -5,22 +5,20 @@ import { authenticate } from "../shopify.server";
 import { AppProvider, Card, Page, TextField, Button, BlockStack } from "@shopify/polaris";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import { useState } from "react";
-import { getOrCreateShopifyToken } from "../db/shop-settings.server";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
-  await getOrCreateShopifyToken(session.shop);
   const shopifyAccessToken = session.accessToken;
-  const shopifyApiKey = process.env.SHOPIFY_API_KEY || "";
-  return json({ shopifyAccessToken, shopifyApiKey });
+  const shopDomain = session.shop;
+  return json({ shopifyAccessToken, shopDomain });
 };
 
 export default function App() {
-  const { shopifyAccessToken, shopifyApiKey } = useLoaderData<typeof loader>();
+  const { shopifyAccessToken, shopDomain } = useLoaderData<typeof loader>();
   const [copiedToken, setCopiedToken] = useState(false);
-  const [copiedApiKey, setCopiedApiKey] = useState(false);
+  const [copiedShop, setCopiedShop] = useState(false);
 
   const handleCopyToken = () => {
     if (shopifyAccessToken) {
@@ -30,11 +28,11 @@ export default function App() {
     }
   };
 
-  const handleCopyApiKey = () => {
-    if (shopifyApiKey) {
-      navigator.clipboard.writeText(shopifyApiKey);
-      setCopiedApiKey(true);
-      setTimeout(() => setCopiedApiKey(false), 1500);
+  const handleCopyShop = () => {
+    if (shopDomain) {
+      navigator.clipboard.writeText(shopDomain);
+      setCopiedShop(true);
+      setTimeout(() => setCopiedShop(false), 1500);
     }
   };
 
@@ -48,20 +46,20 @@ export default function App() {
               value={shopifyAccessToken || ""}
               readOnly
               autoComplete="off"
-              helpText="Token d'accès pour l'API Shopify (sha_...)"
+              helpText="Token d'accès pour l'API Shopify à renseigner dans l'app Upsellr"
             />
             <Button onClick={handleCopyToken} variant="primary" disabled={!shopifyAccessToken}>
               {copiedToken ? "Copié !" : "Copier le token"}
             </Button>
             <TextField
-              label="API Key Shopify"
-              value={shopifyApiKey || ""}
+              label="Nom de la boutique Shopify"
+              value={shopDomain || ""}
               readOnly
               autoComplete="off"
-              helpText="Clé API de l'application Shopify"
+              helpText="Domaine de la boutique à renseigner dans l'app Upsellr"
             />
-            <Button onClick={handleCopyApiKey} variant="primary" disabled={!shopifyApiKey}>
-              {copiedApiKey ? "Copié !" : "Copier la clé API"}
+            <Button onClick={handleCopyShop} variant="primary" disabled={!shopDomain}>
+              {copiedShop ? "Copié !" : "Copier le domaine"}
             </Button>
           </BlockStack>
         </Card>
