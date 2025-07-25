@@ -1,7 +1,7 @@
 import { json } from "@remix-run/node";
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { getShopifyAdminFromToken } from "../utils/shopify-auth";
-import { parseProductFilters, buildShopifyQuery, getAllProductsWithPagination, applyNodeSideFilters } from "../utils/shopify-products";
+import { parseProductFilters, buildShopifyQuery, getAllProductsWithPagination, applyNodeSideFilters } from "../utils/shopify-filters";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shopifyAuth = await getShopifyAdminFromToken(request);

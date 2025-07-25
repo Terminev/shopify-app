@@ -50,24 +50,93 @@ export function buildShopifyQuery(filters: ReturnType<typeof parseProductFilters
   return shopifyQueryParts.join(' ');
 }
 
-export async function getAllProductsWithPagination(adminUrl: string, token: string, shopifyQuery: string) {
+export async function getAllProductsWithPagination(adminUrl: string, token: string, shopifyQuery: string, allProductFields: boolean = false) {
   let allProducts: any[] = [];
   let hasNextPage = true;
   let cursor: string | null = null;
+  let productsQuery: string;
+
   while (hasNextPage) {
-    const productsQuery = `
-      query getAllProducts($first: Int!, $after: String, $query: String) {
-        products(first: $first, after: $after, query: $query) {
-          pageInfo { hasNextPage endCursor }
-          edges { node {
-            id
-            collections(first: 250) { edges { node { id handle } } }
-            category { id name }
-            productType
-          }}
+    if (allProductFields) {
+      productsQuery = `
+        query getAllProducts($first: Int!, $after: String, $query: String) {
+          products(first: $first, after: $after, query: $query) {
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+            edges {
+              node {
+                id
+                title
+                handle
+                description
+                status
+                totalInventory
+                createdAt
+                updatedAt
+                vendor
+                productType
+                tags
+                variants(first: 250) {
+                  edges {
+                    node {
+                      id
+                      title
+                      sku
+                      price
+                      compareAtPrice
+                      inventoryQuantity
+                      barcode
+                      taxable
+                    }
+                  }
+                }
+                images(first: 250) {
+                  edges {
+                    node {
+                      id
+                      url
+                      altText
+                      width
+                      height
+                    }
+                  }
+                }
+                collections(first: 250) {
+                  edges {
+                    node {
+                      id
+                      title
+                      handle
+                    }
+                  }
+                }
+                category {
+                  id
+                  name
+                }
+              }
+            }
+          }
         }
-      }
     `;
+    } else {
+      productsQuery = `
+        query getAllProducts($first: Int!, $after: String, $query: String) {
+          products(first: $first, after: $after, query: $query) {
+            pageInfo { hasNextPage endCursor }
+            edges { node {
+              id
+              collections(first: 250) { edges { node { id handle } } }
+              category { id name }
+              productType
+            }}
+          }
+        }
+      `;
+    }
+
     const response: Response = await fetch(adminUrl, {
       method: 'POST',
       headers: {
