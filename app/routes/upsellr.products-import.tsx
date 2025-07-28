@@ -56,14 +56,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
     
     // Gestion des variantes avec SKU et EAN
-    if (prod.sku || prod.ean) {
+    if (!prod.id && (prod.sku || prod.ean || prod.inventory_quantity)) {
+      // Pour les nouveaux produits, on crée une variante
       input.variants = [{
         sku: prod.sku || null,
         barcode: prod.ean || null,
-        inventoryQuantities: prod.inventory_quantity ? [{
-          availableQuantity: prod.inventory_quantity,
-          locationId: "gid://shopify/Location/1" // ID par défaut, à adapter selon votre configuration
-        }] : undefined
+        // Pour la gestion du stock, on utilise inventoryItem au lieu de inventoryQuantities
+        inventoryItem: prod.inventory_quantity ? {
+          tracked: true
+        } : undefined
       }];
     }
     
@@ -206,6 +207,145 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           },
           body: JSON.stringify({ query: deleteMediaMutation, variables: { productId: createdProduct.id, mediaIds } }),
         });
+      }
+    }
+
+    // Gestion des variantes pour les produits existants (mise à jour SKU/EAN)
+    if (createdProduct && prod.id && (prod.sku || prod.ean)) {
+      // Récupérer la première variante du produit
+      const getVariantQuery = `
+        query getProductVariants($id: ID!) {
+          product(id: $id) {
+            variants(first: 1) {
+              edges {
+                node {
+                  id
+                }
+              }
+            }
+          }
+        }
+      `;
+      
+      const variantResp = await fetch(adminUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Access-Token': token,
+        },
+        body: JSON.stringify({ query: getVariantQuery, variables: { id: createdProduct.id } }),
+      });
+      
+      const variantData = await variantResp.json();
+      const variant = variantData.data?.product?.variants?.edges?.[0]?.node;
+      
+      if (variant?.id) {
+        // Mettre à jour la variante
+        const updateVariantMutation = `
+          mutation productVariantUpdate($input: ProductVariantInput!) {
+            productVariantUpdate(input: $input) {
+              productVariant {
+                id
+                sku
+                barcode
+              }
+              userErrors { field message }
+            }
+          }
+        `;
+        
+        const updateVariantResp = await fetch(adminUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Shopify-Access-Token': token,
+          },
+          body: JSON.stringify({
+            query: updateVariantMutation,
+            variables: {
+              input: {
+                id: variant.id,
+                sku: prod.sku || null,
+                barcode: prod.ean || null
+              }
+            }
+          }),
+        });
+        
+        const updateVariantData = await updateVariantResp.json();
+        if (updateVariantData.data?.productVariantUpdate?.userErrors?.length) {
+          console.log("Erreurs lors de la mise à jour de la variante:", updateVariantData.data.productVariantUpdate.userErrors);
+        }
+      }
+    }
+
+    // Gestion de l'inventaire si nécessaire
+    if (createdProduct && prod.inventory_quantity !== undefined) {
+      // Récupérer l'inventoryItem de la première variante
+      const getInventoryQuery = `
+        query getProductVariants($id: ID!) {
+          product(id: $id) {
+            variants(first: 1) {
+              edges {
+                node {
+                  id
+                  inventoryItem {
+                    id
+                  }
+                }
+              }
+            }
+          }
+        }
+      `;
+      
+      const inventoryResp = await fetch(adminUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Access-Token': token,
+        },
+        body: JSON.stringify({ query: getInventoryQuery, variables: { id: createdProduct.id } }),
+      });
+      
+      const inventoryData = await inventoryResp.json();
+      const variant = inventoryData.data?.product?.variants?.edges?.[0]?.node;
+      
+      if (variant?.inventoryItem?.id) {
+        // Mettre à jour l'inventaire
+        const updateInventoryMutation = `
+          mutation inventorySetQuantity($input: InventorySetQuantityInput!) {
+            inventorySetQuantity(input: $input) {
+              inventoryLevel {
+                available
+              }
+              userErrors { field message }
+            }
+          }
+        `;
+        
+        const updateInventoryResp = await fetch(adminUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Shopify-Access-Token': token,
+          },
+          body: JSON.stringify({
+            query: updateInventoryMutation,
+            variables: {
+              input: {
+                inventoryItemId: variant.inventoryItem.id,
+                locationId: "gid://shopify/Location/1", // ID par défaut
+                quantity: prod.inventory_quantity
+              }
+            }
+          }),
+        });
+        
+        const updateInventoryData = await updateInventoryResp.json();
+        if (updateInventoryData.data?.inventorySetQuantity?.userErrors?.length) {
+          console.log("Erreurs lors de la mise à jour de l'inventaire:", updateInventoryData.data.inventorySetQuantity.userErrors);
+        }
       }
     }
 
