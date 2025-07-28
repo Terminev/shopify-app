@@ -14,7 +14,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ success: false, error: shopifyAuth.error.message }, { status: shopifyAuth.error.status });
   }
   
-  const { token, shopDomain, adminUrl } = shopifyAuth;
+  const { token, adminUrl } = shopifyAuth;
 
   let body: any;
   try {
@@ -55,6 +55,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       });
     }
     
+    // Gestion des variantes avec SKU et EAN
+    if (prod.sku || prod.ean) {
+      input.variants = [{
+        sku: prod.sku || null,
+        barcode: prod.ean || null,
+        inventoryQuantities: prod.inventory_quantity ? [{
+          availableQuantity: prod.inventory_quantity,
+          locationId: "gid://shopify/Location/1" // ID par défaut, à adapter selon votre configuration
+        }] : undefined
+      }];
+    }
+    
     if (prod.id) input.id = prod.id;
 
     let mutation: string;
@@ -78,6 +90,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               metafield(namespace: "custom", key: "short_description") {
                 value
               }
+              variants(first: 10) {
+                edges {
+                  node {
+                    id
+                    sku
+                    barcode
+                    inventoryQuantity
+                  }
+                }
+              }
             }
             userErrors { field message }
           }
@@ -99,6 +121,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               }
               metafield(namespace: "custom", key: "short_description") {
                 value
+              }
+              variants(first: 10) {
+                edges {
+                  node {
+                    id
+                    sku
+                    barcode
+                    inventoryQuantity
+                  }
+                }
               }
             }
             userErrors { field message }
@@ -126,8 +158,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       creationErrors = data.data?.productCreate?.userErrors || [];
     }
 
-    let imageErrors = [];
-    let appendedImages = [];
+    // Variables pour le traitement des images
 
     // Suppression des images existantes si update
     if (prod.id && createdProduct) {
@@ -217,10 +248,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         body: JSON.stringify({ query: imageMutation, variables: imageVariables }),
       });
 
+      // Vérification des erreurs d'images si nécessaire
       const imageData = await imageResp.json();
-
-      appendedImages = imageData.data?.productCreateMedia?.media || [];
-      imageErrors = imageData.data?.productCreateMedia?.mediaUserErrors || [];
+      if (imageData.data?.productCreateMedia?.mediaUserErrors?.length) {
+        console.log("Erreurs lors de l'ajout des images:", imageData.data.productCreateMedia.mediaUserErrors);
+      }
     }
 
     // Ajout aux collections
@@ -319,6 +351,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     let metaDescription = createdProduct?.seo?.description || null;
     let shortDescription = createdProduct?.metafield?.value || null;
     
+    // Récupération des informations des variantes (SKU, EAN, stock)
+    let variants = [];
+    if (createdProduct?.variants?.edges) {
+      variants = createdProduct.variants.edges.map((edge: any) => ({
+        id: edge.node.id,
+        sku: edge.node.sku,
+        barcode: edge.node.barcode,
+        inventoryQuantity: edge.node.inventoryQuantity
+      }));
+    }
+    
     if (creationErrors && creationErrors.length) {
       status = "error";
       error = creationErrors.map(e => e.message).join(", ");
@@ -331,7 +374,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       upsellr_raw_id: upsellrRawId,
       meta_title: metaTitle,
       meta_description: metaDescription,
-      short_description: shortDescription
+      short_description: shortDescription,
+      variants
     });
   }
 
