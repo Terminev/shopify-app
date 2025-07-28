@@ -50,8 +50,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       input.metafields.push({
         namespace: "custom",
         key: "short_description",
-        value: prod.short_description,
-        type: "single_line_text_field"
+        value: prod.short_description
       });
     }
     
