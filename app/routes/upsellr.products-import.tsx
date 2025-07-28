@@ -233,6 +233,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     // Suppression des images existantes si update
     if (prod.id && createdProduct) {
+      console.log("🖼️ Début traitement images - Suppression images existantes");
+      
       // 1. Récupérer les media (images) existants du produit
       const getMediaQuery = `
         query getProductMedia($id: ID!) {
@@ -249,6 +251,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           }
         }
       `;
+      console.log("📡 Récupération media existants pour:", createdProduct.id);
       const getMediaResp = await fetch(adminUrl, {
         method: "POST",
         headers: {
@@ -261,10 +264,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }),
       });
       const getMediaData = await getMediaResp.json();
+      console.log("📥 Media existants:", JSON.stringify(getMediaData, null, 2));
+      
       const mediaEdges = getMediaData.data?.product?.media?.edges || [];
       const mediaIds = mediaEdges
         .map((edge: any) => edge.node?.id)
         .filter(Boolean);
+      console.log(`🗑️ Suppression de ${mediaIds.length} media existants:`, mediaIds);
+      
       if (mediaIds.length > 0) {
         const deleteMediaMutation = `
           mutation productDeleteMedia($productId: ID!, $mediaIds: [ID!]!) {
@@ -274,7 +281,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             }
           }
         `;
-        await fetch(adminUrl, {
+        const deleteMediaResp = await fetch(adminUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -285,11 +292,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             variables: { productId: createdProduct.id, mediaIds },
           }),
         });
+        const deleteMediaData = await deleteMediaResp.json();
+        console.log("🗑️ Résultat suppression media:", JSON.stringify(deleteMediaData, null, 2));
       }
     }
 
     // Étape 2 : Ajout des images séparément
     if (createdProduct && prod.images?.length) {
+      console.log(`🖼️ Ajout de ${prod.images.length} nouvelles images`);
+      console.log("📋 Images à ajouter:", prod.images);
+      
       const imageMutation = `
         mutation productCreateMedia($productId: ID!, $media: [CreateMediaInput!]!) {
           productCreateMedia(productId: $productId, media: $media) {
@@ -317,8 +329,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           mediaContentType: "IMAGE",
         })),
       };
+      
+      console.log("📤 Variables création media:", JSON.stringify(imageVariables, null, 2));
 
-      await fetch(adminUrl, {
+      const createMediaResp = await fetch(adminUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -329,13 +343,33 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           variables: imageVariables,
         }),
       });
+      
+      const createMediaData = await createMediaResp.json();
+      console.log("📥 Résultat création media:", JSON.stringify(createMediaData, null, 2));
+      
+      if (createMediaData.errors) {
+        console.error("❌ Erreurs création media:", JSON.stringify(createMediaData.errors, null, 2));
+      }
+      
+      const mediaUserErrors = createMediaData.data?.productCreateMedia?.mediaUserErrors || [];
+      if (mediaUserErrors.length > 0) {
+        console.error("⚠️ Erreurs utilisateur création media:", JSON.stringify(mediaUserErrors, null, 2));
+      } else {
+        console.log("✅ Media créés avec succès");
+      }
+    } else {
+      console.log("ℹ️ Aucune image à ajouter");
     }
 
     // Ajout aux collections
     let collectionErrors: any[] = [];
     if (createdProduct) {
+      console.log("📚 Début traitement collections");
+      
       // Si update, retirer le produit de toutes les collections existantes avant d'ajouter les nouvelles (ou rien si prod.collections vide)
       if (prod.id) {
+        console.log("🔄 Mode UPDATE - Suppression des collections existantes");
+        
         // 1. Récupérer toutes les collections du produit
         const getCollectionsQuery = `
           query getProductCollections($id: ID!) {
@@ -346,6 +380,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             }
           }
         `;
+        console.log("📡 Récupération collections existantes");
         const getCollectionsResp = await fetch(adminUrl, {
           method: "POST",
           headers: {
@@ -358,12 +393,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           }),
         });
         const getCollectionsData = await getCollectionsResp.json();
+        console.log("📥 Collections existantes:", JSON.stringify(getCollectionsData, null, 2));
+        
         const currentCollections =
           getCollectionsData.data?.product?.collections?.edges?.map(
             (edge: any) => edge.node.id,
           ) || [];
+        console.log(`🗑️ Suppression de ${currentCollections.length} collections:`, currentCollections);
+        
         // 2. Retirer le produit de chaque collection
         for (const collectionId of currentCollections) {
+          console.log(`🗑️ Suppression du produit de la collection: ${collectionId}`);
           const removeFromCollectionMutation = `
             mutation removeProductFromCollection($id: ID!, $productIds: [ID!]!) {
               collectionRemoveProducts(id: $id, productIds: $productIds) {
@@ -383,10 +423,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             }),
           });
           const removeData = await removeResp.json();
+          console.log(`📥 Résultat suppression collection ${collectionId}:`, JSON.stringify(removeData, null, 2));
+          
           if (
             removeData.errors ||
             removeData.data?.collectionRemoveProducts?.userErrors?.length
           ) {
+            console.error(`❌ Erreur suppression collection ${collectionId}:`, JSON.stringify(removeData, null, 2));
             collectionErrors.push({
               collectionId,
               errors: removeData.errors,
@@ -397,7 +440,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
       // Ajout aux nouvelles collections (logique existante)
       if (prod.collections && prod.collections.length) {
+        console.log(`📚 Ajout aux ${prod.collections.length} nouvelles collections:`, prod.collections);
+        
         for (const collectionId of prod.collections) {
+          console.log(`➕ Ajout du produit à la collection: ${collectionId}`);
           const addToCollectionMutation = `
             mutation addProductToCollection($id: ID!, $productIds: [ID!]!) {
               collectionAddProducts(id: $id, productIds: $productIds) {
@@ -418,18 +464,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           });
 
           const collectionData = await collectionResp.json();
+          console.log(`📥 Résultat ajout collection ${collectionId}:`, JSON.stringify(collectionData, null, 2));
+          
           if (
             collectionData.errors ||
             collectionData.data?.collectionAddProducts?.userErrors?.length
           ) {
+            console.error(`❌ Erreur ajout collection ${collectionId}:`, JSON.stringify(collectionData, null, 2));
             collectionErrors.push({
               collectionId,
               errors: collectionData.errors,
               userErrors:
                 collectionData.data?.collectionAddProducts?.userErrors,
             });
+          } else {
+            console.log(`✅ Produit ajouté avec succès à la collection ${collectionId}`);
           }
         }
+      } else {
+        console.log("ℹ️ Aucune collection à ajouter");
       }
     }
 
