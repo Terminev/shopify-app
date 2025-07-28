@@ -61,7 +61,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       input.variants = [{
         sku: prod.sku || null,
         barcode: prod.ean || null,
-        // Pour la gestion du stock, on utilise inventoryItem au lieu de inventoryQuantities
+        price: prod.price || "0.00",
+        // Pour la gestion du stock, on utilise inventoryItem
         inventoryItem: prod.inventory_quantity ? {
           tracked: true
         } : undefined
@@ -248,6 +249,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 id
                 sku
                 barcode
+                inventoryQuantity
               }
               userErrors { field message }
             }
@@ -275,6 +277,71 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         const updateVariantData = await updateVariantResp.json();
         if (updateVariantData.data?.productVariantUpdate?.userErrors?.length) {
           console.log("Erreurs lors de la mise à jour de la variante:", updateVariantData.data.productVariantUpdate.userErrors);
+        }
+        
+        // Mettre à jour l'inventaire pour les produits existants
+        if (prod.inventory_quantity !== undefined && updateVariantData.data?.productVariantUpdate?.productVariant) {
+          const variant = updateVariantData.data.productVariantUpdate.productVariant;
+          
+          // Récupérer l'inventoryItem
+          const getInventoryItemQuery = `
+            query getVariantInventoryItem($id: ID!) {
+              productVariant(id: $id) {
+                inventoryItem {
+                  id
+                }
+              }
+            }
+          `;
+          
+          const inventoryItemResp = await fetch(adminUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Shopify-Access-Token': token,
+            },
+            body: JSON.stringify({ query: getInventoryItemQuery, variables: { id: variant.id } }),
+          });
+          
+          const inventoryItemData = await inventoryItemResp.json();
+          const inventoryItem = inventoryItemData.data?.productVariant?.inventoryItem;
+          
+          if (inventoryItem?.id) {
+            // Mettre à jour l'inventaire
+            const updateInventoryMutation = `
+              mutation inventorySetQuantity($input: InventorySetQuantityInput!) {
+                inventorySetQuantity(input: $input) {
+                  inventoryLevel {
+                    available
+                  }
+                  userErrors { field message }
+                }
+              }
+            `;
+            
+            const updateInventoryResp = await fetch(adminUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Shopify-Access-Token': token,
+              },
+              body: JSON.stringify({
+                query: updateInventoryMutation,
+                variables: {
+                  input: {
+                    inventoryItemId: inventoryItem.id,
+                    locationId: "gid://shopify/Location/1",
+                    quantity: prod.inventory_quantity
+                  }
+                }
+              }),
+            });
+            
+            const updateInventoryData = await updateInventoryResp.json();
+            if (updateInventoryData.data?.inventorySetQuantity?.userErrors?.length) {
+              console.log("Erreurs lors de la mise à jour de l'inventaire:", updateInventoryData.data.inventorySetQuantity.userErrors);
+            }
+          }
         }
       }
     }
@@ -312,7 +379,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       const variant = inventoryData.data?.product?.variants?.edges?.[0]?.node;
       
       if (variant?.inventoryItem?.id) {
-        // Mettre à jour l'inventaire
+        // Mettre à jour l'inventaire avec la bonne mutation
         const updateInventoryMutation = `
           mutation inventorySetQuantity($input: InventorySetQuantityInput!) {
             inventorySetQuantity(input: $input) {
@@ -336,7 +403,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               input: {
                 inventoryItemId: variant.inventoryItem.id,
                 locationId: "gid://shopify/Location/1", // ID par défaut
-                quantity: prod.inventory_quantity
+                quantity: prod.inventory_quantity // Utiliser quantity pour définir la quantité exacte
               }
             }
           }),
@@ -496,9 +563,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (createdProduct?.variants?.edges) {
       variants = createdProduct.variants.edges.map((edge: any) => ({
         id: edge.node.id,
+        title: edge.node.title,
         sku: edge.node.sku,
         barcode: edge.node.barcode,
-        inventoryQuantity: edge.node.inventoryQuantity
+        price: edge.node.price,
+        inventoryQuantity: edge.node.inventoryQuantity,
+        taxable: edge.node.taxable
       }));
     }
     
