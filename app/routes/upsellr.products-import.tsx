@@ -14,9 +14,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ success: false, error: shopifyAuth.error.message }, { status: shopifyAuth.error.status });
   }
   
-  const { token, adminUrl } = shopifyAuth;
+  const { token, shopDomain, adminUrl } = shopifyAuth;
 
-  let body: any;
+  let body;
   try {
     body = await request.json();
   } catch (err) {
@@ -27,7 +27,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ success: false, error: "Le body doit contenir un tableau 'products'" }, { status: 400 });
   }
 
-  const results: any[] = [];
+  const results = [];
   for (const prod of body.products) {
     if (!prod.title && !prod.id) continue;
 
@@ -51,16 +51,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         namespace: "custom",
         key: "short_description",
         value: prod.short_description,
-        type: "string"
+        type: "single_line_text_field"
       });
     }
     
     if (prod.id) input.id = prod.id;
 
-    let mutation: string;
-    let variables: any;
-    let createdProduct: any = null;
-    let creationErrors: any[] = [];
+    let mutation;
+    let variables;
+    let createdProduct = null;
+    let creationErrors = [];
 
     if (prod.id) {
       // Update existing product
@@ -126,9 +126,104 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       creationErrors = data.data?.productCreate?.userErrors || [];
     }
 
+    // === AJOUT/UPDATE DES VARIANTES (SKU/BARCODE) ===
+    if (createdProduct && prod.variants && prod.variants.length) {
+      // 1. Récupérer les variants existants du produit
+      const getVariantsQuery = `
+        query GetProductVariants($id: ID!) {
+          product(id: $id) {
+            variants(first: 100) {
+              edges {
+                node {
+                  id
+                  title
+                  sku
+                  barcode
+                }
+              }
+            }
+          }
+        }
+      `;
+
+      const getVariantsResp = await fetch(adminUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Access-Token': token,
+        },
+        body: JSON.stringify({
+          query: getVariantsQuery,
+          variables: { id: createdProduct.id }
+        }),
+      });
+
+      const getVariantsData = await getVariantsResp.json();
+      const existingVariants = getVariantsData.data?.product?.variants?.edges || [];
+
+      // 2. Préparer les variants pour la mise à jour
+      const variantsInput = prod.variants.map((variantUpdate: any, index: number) => {
+        const v: any = {};
+        
+        // Si on a un ID spécifique dans la requête, l'utiliser
+        if (variantUpdate.id) {
+          v.id = variantUpdate.id;
+        } 
+        // Sinon, utiliser le variant existant correspondant à l'index
+        else if (existingVariants[index]) {
+          v.id = existingVariants[index].node.id;
+        }
+        
+        // Ajouter les champs à mettre à jour
+        if (variantUpdate.sku !== undefined) v.sku = variantUpdate.sku;
+        if (variantUpdate.barcode !== undefined) v.barcode = variantUpdate.barcode;
+        if (variantUpdate.price !== undefined) v.price = variantUpdate.price;
+        
+        return v;
+      }).filter((v: any) => v.id); // Ne garder que les variants avec un ID
+
+      if (variantsInput.length > 0) {
+        const variantMutation = `
+          mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+            productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+              productVariants {
+                id
+                sku
+                barcode
+                price
+              }
+              userErrors {
+                field
+                message
+              }
+            }
+          }
+        `;
+
+        const variantResp = await fetch(adminUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Shopify-Access-Token': token,
+          },
+          body: JSON.stringify({
+            query: variantMutation,
+            variables: {
+              productId: createdProduct.id,
+              variants: variantsInput
+            }
+          }),
+        });
+
+        const variantData = await variantResp.json();
+        if (variantData.data?.productVariantsBulkUpdate?.userErrors?.length) {
+          console.log("Erreurs lors de la mise à jour des variants:", variantData.data.productVariantsBulkUpdate.userErrors);
+        }
+      }
+    }
+
     // Suppression des images existantes si update
     if (prod.id && createdProduct) {
-      // 1. Récupérer les media (images) existants du produit
       const getMediaQuery = `
         query getProductMedia($id: ID!) {
           product(id: $id) {
@@ -175,7 +270,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
 
-    // Étape 2 : Ajout des images séparément
+    // Ajout des images séparément
+    let imageErrors = [];
+    let appendedImages = [];
     if (createdProduct && prod.images?.length) {
       const imageMutation = `
         mutation productCreateMedia($productId: ID!, $media: [CreateMediaInput!]!) {
@@ -199,13 +296,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
       const imageVariables = {
         productId: createdProduct.id,
-        media: prod.images.map((src: string) => ({
+        media: prod.images.map((src: any) => ({
           originalSource: src,
           mediaContentType: "IMAGE"
         })),
       };
 
-      await fetch(adminUrl, {
+      const imageResp = await fetch(adminUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -213,14 +310,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         },
         body: JSON.stringify({ query: imageMutation, variables: imageVariables }),
       });
+
+      const imageData = await imageResp.json();
+
+      appendedImages = imageData.data?.productCreateMedia?.media || [];
+      imageErrors = imageData.data?.productCreateMedia?.mediaUserErrors || [];
     }
 
     // Ajout aux collections
-    let collectionErrors: any[] = [];
+    let collectionErrors = [];
     if (createdProduct) {
       // Si update, retirer le produit de toutes les collections existantes avant d'ajouter les nouvelles (ou rien si prod.collections vide)
       if (prod.id) {
-        // 1. Récupérer toutes les collections du produit
         const getCollectionsQuery = `
           query getProductCollections($id: ID!) {
             product(id: $id) {
@@ -240,7 +341,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         });
         const getCollectionsData = await getCollectionsResp.json();
         const currentCollections = getCollectionsData.data?.product?.collections?.edges?.map((edge: any) => edge.node.id) || [];
-        // 2. Retirer le produit de chaque collection
         for (const collectionId of currentCollections) {
           const removeFromCollectionMutation = `
             mutation removeProductFromCollection($id: ID!, $productIds: [ID!]!) {
@@ -270,7 +370,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           }
         }
       }
-      // Ajout aux nouvelles collections (logique existante)
+      // Ajout aux nouvelles collections
       if (prod.collections && prod.collections.length) {
         for (const collectionId of prod.collections) {
           const addToCollectionMutation = `
@@ -313,7 +413,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     
     if (creationErrors && creationErrors.length) {
       status = "error";
-      error = creationErrors.map(e => e.message).join(", ");
+      error = creationErrors.map((e: any) => e.message).join(", ");
     }
 
     results.push({
