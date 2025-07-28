@@ -43,6 +43,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (prod.tags) input.tags = Array.isArray(prod.tags) ? prod.tags : [prod.tags];
     if (prod.meta_title) input.seo = { ...input.seo, title: prod.meta_title };
     if (prod.meta_description) input.seo = { ...input.seo, description: prod.meta_description };
+    
+    // Gestion de la short_description via metafield
+    if (prod.short_description) {
+      if (!input.metafields) input.metafields = [];
+      input.metafields.push({
+        namespace: "custom",
+        key: "short_description",
+        value: prod.short_description,
+        type: "single_line_text_field"
+      });
+    }
+    
     if (prod.id) input.id = prod.id;
 
     let mutation: string;
@@ -63,6 +75,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 title
                 description
               }
+              metafield(namespace: "custom", key: "short_description") {
+                value
+              }
             }
             userErrors { field message }
           }
@@ -81,6 +96,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               seo {
                 title
                 description
+              }
+              metafield(namespace: "custom", key: "short_description") {
+                value
               }
             }
             userErrors { field message }
@@ -299,6 +317,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     let shopifyId = createdProduct?.id || null;
     let metaTitle = createdProduct?.seo?.title || null;
     let metaDescription = createdProduct?.seo?.description || null;
+    let shortDescription = createdProduct?.metafield?.value || null;
     
     if (creationErrors && creationErrors.length) {
       status = "error";
@@ -311,7 +330,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       shopify_id: shopifyId,
       upsellr_raw_id: upsellrRawId,
       meta_title: metaTitle,
-      meta_description: metaDescription
+      meta_description: metaDescription,
+      short_description: shortDescription
     });
   }
 

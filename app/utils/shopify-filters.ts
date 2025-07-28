@@ -120,6 +120,9 @@ export async function getAllProductsWithPagination(adminUrl: string, token: stri
                   title
                   description
                 }
+                metafield(namespace: "custom", key: "short_description") {
+                  value
+                }
               }
             }
           }
