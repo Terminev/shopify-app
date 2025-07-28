@@ -116,6 +116,10 @@ export async function getAllProductsWithPagination(adminUrl: string, token: stri
                   id
                   name
                 }
+                seo {
+                  title
+                  description
+                }
               }
             }
           }

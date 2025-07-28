@@ -41,6 +41,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (prod.vendor) input.vendor = prod.vendor;
     if (prod.productType) input.productType = prod.productType;
     if (prod.tags) input.tags = Array.isArray(prod.tags) ? prod.tags : [prod.tags];
+    if (prod.meta_title) input.seo = { ...input.seo, title: prod.meta_title };
+    if (prod.meta_description) input.seo = { ...input.seo, description: prod.meta_description };
     if (prod.id) input.id = prod.id;
 
     let mutation: string;
@@ -53,7 +55,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       mutation = `
         mutation productUpdate($input: ProductInput!) {
           productUpdate(input: $input) {
-            product { id title descriptionHtml }
+            product { 
+              id 
+              title 
+              descriptionHtml
+              seo {
+                title
+                description
+              }
+            }
             userErrors { field message }
           }
         }
@@ -64,7 +74,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       mutation = `
         mutation productCreate($input: ProductInput!) {
           productCreate(input: $input) {
-            product { id title descriptionHtml }
+            product { 
+              id 
+              title 
+              descriptionHtml
+              seo {
+                title
+                description
+              }
+            }
             userErrors { field message }
           }
         }
@@ -279,6 +297,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     let status = "ok";
     let error = null;
     let shopifyId = createdProduct?.id || null;
+    let metaTitle = createdProduct?.seo?.title || null;
+    let metaDescription = createdProduct?.seo?.description || null;
+    
     if (creationErrors && creationErrors.length) {
       status = "error";
       error = creationErrors.map(e => e.message).join(", ");
@@ -288,7 +309,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       status,
       error,
       shopify_id: shopifyId,
-      upsellr_raw_id: upsellrRawId
+      upsellr_raw_id: upsellrRawId,
+      meta_title: metaTitle,
+      meta_description: metaDescription
     });
   }
 
