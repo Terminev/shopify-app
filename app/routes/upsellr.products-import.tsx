@@ -5,7 +5,6 @@ import { getShopifyAdminFromToken } from "../utils/shopify-auth";
 export const action = async ({ request }: ActionFunctionArgs) => {
   console.log("==> /upsellr/products-import called");
 
-  // Vérif méthode
   if (request.method !== "POST") {
     console.log("Mauvaise méthode :", request.method);
     return json(
@@ -14,7 +13,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   }
 
-  // Auth Shopify
   const shopifyAuth = await getShopifyAdminFromToken(request);
   if (shopifyAuth.error) {
     return json(
@@ -24,7 +22,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
   const { token, adminUrl } = shopifyAuth;
 
-  // Lecture body
   let body: any;
   try {
     body = await request.json();
@@ -34,6 +31,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       { status: 400 },
     );
   }
+
   if (!body.products || !Array.isArray(body.products)) {
     return json(
       { success: false, error: "Le body doit contenir un tableau 'products'" },
@@ -49,7 +47,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const upsellrRawId = prod.upsellr_raw_id ?? null;
     const input: any = { title: prod.title };
 
-    // Champs de base
     if (prod.description) input.descriptionHtml = prod.description;
     if (prod.status) input.status = prod.status;
     if (prod.vendor) input.vendor = prod.vendor;
@@ -60,7 +57,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (prod.meta_description)
       input.seo = { ...input.seo, description: prod.meta_description };
 
-    // Short description
     if (prod.short_description) {
       input.metafields = [
         {
@@ -72,52 +68,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       ];
     }
 
-    // Gestion SKU / EAN
-    let variantId: string | null = null;
-    if (prod.id) {
-      // Update → on récupère variantId
-      input.id = prod.id;
+    if (prod.id) input.id = prod.id;
 
-      const variantQuery = `
-        query getVariant($id: ID!) {
-          product(id: $id) {
-            variants(first: 1) {
-              edges {
-                node {
-                  id
-                  sku
-                  barcode
-                }
-              }
-            }
-          }
-        }
-      `;
-      const variantResp = await fetch(adminUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Shopify-Access-Token": token,
-        },
-        body: JSON.stringify({
-          query: variantQuery,
-          variables: { id: prod.id },
-        }),
-      });
-      const variantData = await variantResp.json();
-      variantId =
-        variantData.data?.product?.variants?.edges?.[0]?.node?.id || null;
-    }
-
-    if (prod.sku || prod.ean) {
-      const variantInput: any = {};
-      if (variantId) variantInput.id = variantId; // seulement en update
-      if (prod.sku) variantInput.sku = prod.sku;
-      if (prod.ean) variantInput.barcode = prod.ean;
-      input.variants = [variantInput];
-    }
-
-    // Mutation
+    // Mutations productCreate / productUpdate
     let mutation: string;
     if (prod.id) {
       mutation = `
@@ -166,6 +119,71 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       : data.data?.productCreate;
     const createdProduct = resultData?.product;
     const creationErrors = resultData?.userErrors || [];
+
+    // 🔄 Mise à jour SKU/EAN via productVariantUpdate
+    if (prod.sku || prod.ean) {
+      // Récupérer l’ID du variant
+      const variantQuery = `
+        query getVariants($id: ID!) {
+          product(id: $id) {
+            variants(first: 1) {
+              edges {
+                node {
+                  id
+                }
+              }
+            }
+          }
+        }
+      `;
+      const variantResp = await fetch(adminUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Shopify-Access-Token": token,
+        },
+        body: JSON.stringify({
+          query: variantQuery,
+          variables: { id: createdProduct.id },
+        }),
+      });
+      const variantData = await variantResp.json();
+      const variantId =
+        variantData.data?.product?.variants?.edges?.[0]?.node?.id;
+
+      if (variantId) {
+        const variantUpdateMutation = `
+          mutation updateVariant($input: ProductVariantInput!) {
+            productVariantUpdate(input: $input) {
+              productVariant {
+                id
+                sku
+                barcode
+              }
+              userErrors {
+                field
+                message
+              }
+            }
+          }
+        `;
+        const variantInput: any = { id: variantId };
+        if (prod.sku) variantInput.sku = prod.sku;
+        if (prod.ean) variantInput.barcode = prod.ean;
+
+        await fetch(adminUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Shopify-Access-Token": token,
+          },
+          body: JSON.stringify({
+            query: variantUpdateMutation,
+            variables: { input: variantInput },
+          }),
+        });
+      }
+    }
 
     // Suppression images si update
     if (prod.id && createdProduct) {
@@ -247,7 +265,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     // Collections
-    let collectionErrors: any[] = [];
     if (createdProduct) {
       if (prod.id) {
         const getCollectionsQuery = `
@@ -355,10 +372,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       meta_title: createdProduct?.seo?.title || null,
       meta_description: createdProduct?.seo?.description || null,
       short_description: shortDescription,
-      sku: createdProduct?.variants?.edges?.[0]?.node?.sku || null,
-      ean: createdProduct?.variants?.edges?.[0]?.node?.barcode || null,
+      sku: prod.sku || createdProduct?.variants?.edges?.[0]?.node?.sku || null,
+      ean:
+        prod.ean || createdProduct?.variants?.edges?.[0]?.node?.barcode || null,
     });
   }
 
   return json({ results });
 };
+ 
