@@ -55,6 +55,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       });
     }
     
+    // Gestion du SKU et EAN via variants
+    if (prod.sku || prod.ean) {
+      if (!input.variants) input.variants = [];
+      input.variants.push({
+        sku: prod.sku || null,
+        barcode: prod.ean || null,
+        price: prod.price || "0.00"
+      });
+    }
+    
     if (prod.id) input.id = prod.id;
 
     let mutation: string;
@@ -78,6 +88,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               metafield(namespace: "custom", key: "short_description") {
                 value
               }
+              variants(first: 10) {
+                edges {
+                  node {
+                    id
+                    sku
+                    barcode
+                    price
+                  }
+                }
+              }
             }
             userErrors { field message }
           }
@@ -99,6 +119,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               }
               metafield(namespace: "custom", key: "short_description") {
                 value
+              }
+              variants(first: 10) {
+                edges {
+                  node {
+                    id
+                    sku
+                    barcode
+                    price
+                  }
+                }
               }
             }
             userErrors { field message }
@@ -319,6 +349,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     let metaDescription = createdProduct?.seo?.description || null;
     let shortDescription = createdProduct?.metafield?.value || null;
     
+    // Extraction SKU et EAN du premier variant
+    let sku = null;
+    let ean = null;
+    if (createdProduct?.variants?.edges?.length > 0) {
+      const firstVariant = createdProduct.variants.edges[0].node;
+      sku = firstVariant.sku || null;
+      ean = firstVariant.barcode || null;
+    }
+    
     if (creationErrors && creationErrors.length) {
       status = "error";
       error = creationErrors.map(e => e.message).join(", ");
@@ -331,7 +370,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       upsellr_raw_id: upsellrRawId,
       meta_title: metaTitle,
       meta_description: metaDescription,
-      short_description: shortDescription
+      short_description: shortDescription,
+      sku: sku,
+      ean: ean
     });
   }
 
