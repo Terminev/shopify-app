@@ -168,111 +168,144 @@ if (prod.sku || prod.barcode || (prod.variants && prod.variants.length > 0)) {
     } else {
       console.log(`✅ ${variants.length} variante(s) trouvée(s)`);
 
-      // Mise à jour individuelle de chaque variante
-      for (let i = 0; i < variants.length; i++) {
-        const variant = variants[i];
-        let sku = variant.node.sku;
-        let barcode = variant.node.barcode;
+      // Utiliser productVariantsBulkUpdate avec metafields pour SKU et barcode
+      const variantsInput = variants.map((v: any, index: number) => {
+        let sku = v.node.sku;
+        let barcode = v.node.barcode;
 
-        // Déterminer les nouvelles valeurs
-        if (prod.variants && prod.variants.length > i) {
-          if (prod.variants[i].sku) sku = prod.variants[i].sku;
-          if (prod.variants[i].barcode) barcode = prod.variants[i].barcode;
+        if (prod.variants && prod.variants.length > index) {
+          if (prod.variants[index].sku) sku = prod.variants[index].sku;
+          if (prod.variants[index].barcode) barcode = prod.variants[index].barcode;
         } else {
           if (prod.sku) sku = prod.sku;
           if (prod.barcode) barcode = prod.barcode;
         }
 
-        // Essayer avec productVariantUpdate (si disponible)
-        const updateVariantMutation = `
-          mutation productVariantUpdate($input: ProductVariantInput!) {
-            productVariantUpdate(input: $input) {
-              productVariant { id sku barcode }
-              userErrors { field message }
-            }
-          }
-        `;
+        const metafields = [];
+        if (sku) {
+          metafields.push({
+            namespace: "custom",
+            key: "sku",
+            value: sku,
+            type: "single_line_text_field"
+          });
+        }
+        if (barcode) {
+          metafields.push({
+            namespace: "custom",
+            key: "barcode",
+            value: barcode,
+            type: "single_line_text_field"
+          });
+        }
 
-        const variantInput = {
-          id: variant.node.id,
-          sku: sku || null,
-          barcode: barcode || null,
+        return {
+          id: v.node.id,
+          metafields: metafields
         };
+      });
 
-        console.log(`📤 Update variante ${i + 1}:`, JSON.stringify(variantInput, null, 2));
+      console.log("📤 Input BulkUpdate avec metafields:", JSON.stringify(variantsInput, null, 2));
 
-        const updateVariantResp = await fetch(adminUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Shopify-Access-Token": token,
-          },
-          body: JSON.stringify({
-            query: updateVariantMutation,
-            variables: { input: variantInput },
-          }),
-        });
-
-        const updateVariantData = await updateVariantResp.json();
-        console.log(
-          `📥 Résultat update variante ${i + 1}:`,
-          JSON.stringify(updateVariantData, null, 2),
-        );
-
-        if (updateVariantData.errors) {
-          console.error(`❌ Erreur mutation pour variante ${i + 1}:`, JSON.stringify(updateVariantData.errors, null, 2));
-          
-          // Si productVariantUpdate n'existe pas, essayer avec productVariantsBulkUpdate
-          console.log(`🔄 Tentative avec productVariantsBulkUpdate pour variante ${i + 1}...`);
-          
-          const bulkUpdateMutation = `
-            mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
-              productVariantsBulkUpdate(productId: $productId, variants: $variants) {
-                productVariants { id title sku barcode }
-                userErrors { field message }
+      const updateVariantsMutation = `
+        mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+          productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+            productVariants { 
+              id 
+              title 
+              sku 
+              barcode
+              metafields(first: 10) {
+                edges {
+                  node {
+                    namespace
+                    key
+                    value
+                  }
+                }
               }
             }
-          `;
+            userErrors { field message }
+          }
+        }
+      `;
 
-          const bulkInput = [{
-            id: variant.node.id,
-            // Essayer avec des champs différents selon la documentation
-            options: [
-              { name: "Title", value: variant.node.title }
-            ]
-          }];
+      const updateVariantsResp = await fetch(adminUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Shopify-Access-Token": token,
+        },
+        body: JSON.stringify({
+          query: updateVariantsMutation,
+          variables: {
+            productId: createdProduct.id,
+            variants: variantsInput,
+          },
+        }),
+      });
 
-          const bulkResp = await fetch(adminUrl, {
-            method: "POST",
+      const updateVariantsData = await updateVariantsResp.json();
+      console.log("📥 Résultat BulkUpdate:", JSON.stringify(updateVariantsData, null, 2));
+
+      if (updateVariantsData.errors) {
+        console.error("❌ Erreur BulkUpdate:", JSON.stringify(updateVariantsData.errors, null, 2));
+        
+        // Si ça ne marche pas, essayer avec une approche REST API
+        console.log("🔄 Tentative avec REST API...");
+        
+        // Utiliser l'API REST pour mettre à jour les variantes
+        for (let i = 0; i < variants.length; i++) {
+          const variant = variants[i];
+          let sku = variant.node.sku;
+          let barcode = variant.node.barcode;
+
+          if (prod.variants && prod.variants.length > i) {
+            if (prod.variants[i].sku) sku = prod.variants[i].sku;
+            if (prod.variants[i].barcode) barcode = prod.variants[i].barcode;
+          } else {
+            if (prod.sku) sku = prod.sku;
+            if (prod.barcode) barcode = prod.barcode;
+          }
+
+          // Extraire l'ID de la variante de l'URL GraphQL
+          const variantId = variant.node.id.split('/').pop();
+          const restUrl = `https://${shopifyAuth.shopDomain}/admin/api/2024-01/variants/${variantId}.json`;
+          
+          const variantData = {
+            variant: {
+              id: variantId,
+              sku: sku || null,
+              barcode: barcode || null
+            }
+          };
+
+          console.log(`📤 REST Update variante ${i + 1}:`, JSON.stringify(variantData, null, 2));
+
+          const restResp = await fetch(restUrl, {
+            method: "PUT",
             headers: {
               "Content-Type": "application/json",
               "X-Shopify-Access-Token": token,
             },
-            body: JSON.stringify({
-              query: bulkUpdateMutation,
-              variables: {
-                productId: createdProduct.id,
-                variants: bulkInput,
-              },
-            }),
+            body: JSON.stringify(variantData),
           });
 
-          const bulkData = await bulkResp.json();
-          console.log(`📥 Résultat BulkUpdate variante ${i + 1}:`, JSON.stringify(bulkData, null, 2));
+          const restData = await restResp.json();
+          console.log(`📥 Résultat REST variante ${i + 1}:`, JSON.stringify(restData, null, 2));
 
-          const bulkErrors = bulkData.data?.productVariantsBulkUpdate?.userErrors || [];
-          if (bulkErrors.length) {
-            console.error(`⚠️ Erreurs BulkUpdate variante ${i + 1}:`, JSON.stringify(bulkErrors, null, 2));
+          if (restResp.ok) {
+            console.log(`✅ Variante ${i + 1} mise à jour via REST API !`);
           } else {
-            console.log(`✅ Variante ${i + 1} mise à jour via BulkUpdate !`);
+            console.error(`❌ Erreur REST variante ${i + 1}:`, JSON.stringify(restData, null, 2));
           }
+        }
+      } else {
+        const errors = updateVariantsData.data?.productVariantsBulkUpdate?.userErrors || [];
+        if (errors.length) {
+          console.error("⚠️ Erreurs BulkUpdate:", JSON.stringify(errors, null, 2));
         } else {
-          const errors = updateVariantData.data?.productVariantUpdate?.userErrors || [];
-          if (errors.length) {
-            console.error(`⚠️ Erreurs update variante ${i + 1}:`, JSON.stringify(errors, null, 2));
-          } else {
-            console.log(`✅ Variante ${i + 1} mise à jour !`);
-          }
+          console.log("✅ SKU/EAN mis à jour via BulkUpdate avec metafields !");
         }
       }
     }
