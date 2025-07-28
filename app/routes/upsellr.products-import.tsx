@@ -168,144 +168,50 @@ if (prod.sku || prod.barcode || (prod.variants && prod.variants.length > 0)) {
     } else {
       console.log(`✅ ${variants.length} variante(s) trouvée(s)`);
 
-      // Utiliser productVariantsBulkUpdate avec metafields pour SKU et barcode
-      const variantsInput = variants.map((v: any, index: number) => {
-        let sku = v.node.sku;
-        let barcode = v.node.barcode;
+      // Utiliser l'API REST pour mettre à jour les variantes (plus fiable pour sku/barcode)
+      for (let i = 0; i < variants.length; i++) {
+        const variant = variants[i];
+        let sku = variant.node.sku;
+        let barcode = variant.node.barcode;
 
-        if (prod.variants && prod.variants.length > index) {
-          if (prod.variants[index].sku) sku = prod.variants[index].sku;
-          if (prod.variants[index].barcode) barcode = prod.variants[index].barcode;
+        if (prod.variants && prod.variants.length > i) {
+          if (prod.variants[i].sku) sku = prod.variants[i].sku;
+          if (prod.variants[i].barcode) barcode = prod.variants[i].barcode;
         } else {
           if (prod.sku) sku = prod.sku;
           if (prod.barcode) barcode = prod.barcode;
         }
 
-        const metafields = [];
-        if (sku) {
-          metafields.push({
-            namespace: "custom",
-            key: "sku",
-            value: sku,
-            type: "single_line_text_field"
-          });
-        }
-        if (barcode) {
-          metafields.push({
-            namespace: "custom",
-            key: "barcode",
-            value: barcode,
-            type: "single_line_text_field"
-          });
-        }
-
-        return {
-          id: v.node.id,
-          metafields: metafields
+        // Extraire l'ID de la variante de l'URL GraphQL
+        const variantId = variant.node.id.split('/').pop();
+        const restUrl = `https://${shopifyAuth.shopDomain}/admin/api/2024-01/variants/${variantId}.json`;
+        
+        const variantData = {
+          variant: {
+            id: variantId,
+            sku: sku || null,
+            barcode: barcode || null
+          }
         };
-      });
 
-      console.log("📤 Input BulkUpdate avec metafields:", JSON.stringify(variantsInput, null, 2));
+        console.log(`📤 REST Update variante ${i + 1}:`, JSON.stringify(variantData, null, 2));
 
-      const updateVariantsMutation = `
-        mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
-          productVariantsBulkUpdate(productId: $productId, variants: $variants) {
-            productVariants { 
-              id 
-              title 
-              sku 
-              barcode
-              metafields(first: 10) {
-                edges {
-                  node {
-                    namespace
-                    key
-                    value
-                  }
-                }
-              }
-            }
-            userErrors { field message }
-          }
-        }
-      `;
-
-      const updateVariantsResp = await fetch(adminUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Shopify-Access-Token": token,
-        },
-        body: JSON.stringify({
-          query: updateVariantsMutation,
-          variables: {
-            productId: createdProduct.id,
-            variants: variantsInput,
+        const restResp = await fetch(restUrl, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Shopify-Access-Token": token,
           },
-        }),
-      });
+          body: JSON.stringify(variantData),
+        });
 
-      const updateVariantsData = await updateVariantsResp.json();
-      console.log("📥 Résultat BulkUpdate:", JSON.stringify(updateVariantsData, null, 2));
+        const restData = await restResp.json();
+        console.log(`📥 Résultat REST variante ${i + 1}:`, JSON.stringify(restData, null, 2));
 
-      if (updateVariantsData.errors) {
-        console.error("❌ Erreur BulkUpdate:", JSON.stringify(updateVariantsData.errors, null, 2));
-        
-        // Si ça ne marche pas, essayer avec une approche REST API
-        console.log("🔄 Tentative avec REST API...");
-        
-        // Utiliser l'API REST pour mettre à jour les variantes
-        for (let i = 0; i < variants.length; i++) {
-          const variant = variants[i];
-          let sku = variant.node.sku;
-          let barcode = variant.node.barcode;
-
-          if (prod.variants && prod.variants.length > i) {
-            if (prod.variants[i].sku) sku = prod.variants[i].sku;
-            if (prod.variants[i].barcode) barcode = prod.variants[i].barcode;
-          } else {
-            if (prod.sku) sku = prod.sku;
-            if (prod.barcode) barcode = prod.barcode;
-          }
-
-          // Extraire l'ID de la variante de l'URL GraphQL
-          const variantId = variant.node.id.split('/').pop();
-          const restUrl = `https://${shopifyAuth.shopDomain}/admin/api/2024-01/variants/${variantId}.json`;
-          
-          const variantData = {
-            variant: {
-              id: variantId,
-              sku: sku || null,
-              barcode: barcode || null
-            }
-          };
-
-          console.log(`📤 REST Update variante ${i + 1}:`, JSON.stringify(variantData, null, 2));
-
-          const restResp = await fetch(restUrl, {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Shopify-Access-Token": token,
-            },
-            body: JSON.stringify(variantData),
-          });
-
-          const restData = await restResp.json();
-          console.log(`📥 Résultat REST variante ${i + 1}:`, JSON.stringify(restData, null, 2));
-
-          if (restResp.ok) {
-            console.log(`✅ Variante ${i + 1} mise à jour via REST API !`);
-          } else {
-            console.error(`❌ Erreur REST variante ${i + 1}:`, JSON.stringify(restData, null, 2));
-          }
-        }
-      } else {
-        const errors = updateVariantsData.data?.productVariantsBulkUpdate?.userErrors || [];
-        if (errors.length) {
-          console.error("⚠️ Erreurs BulkUpdate:", JSON.stringify(errors, null, 2));
+        if (restResp.ok) {
+          console.log(`✅ Variante ${i + 1} mise à jour via REST API !`);
         } else {
-          console.log("✅ SKU/EAN mis à jour via BulkUpdate avec metafields !");
+          console.error(`❌ Erreur REST variante ${i + 1}:`, JSON.stringify(restData, null, 2));
         }
       }
     }
