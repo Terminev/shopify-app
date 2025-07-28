@@ -14,7 +14,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ success: false, error: shopifyAuth.error.message }, { status: shopifyAuth.error.status });
   }
   
-  const { token, shopDomain, adminUrl } = shopifyAuth;
+  const { token, adminUrl } = shopifyAuth;
 
   let body: any;
   try {
@@ -44,6 +44,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (prod.meta_title) input.seo = { ...input.seo, title: prod.meta_title };
     if (prod.meta_description) input.seo = { ...input.seo, description: prod.meta_description };
     
+    // Gestion du SKU et EAN dans les variants
+    if (prod.sku || prod.ean) {
+      input.variants = [{
+        ...(prod.sku && { sku: prod.sku }),
+        ...(prod.ean && { barcode: prod.ean })
+      }];
+    }
+    
     // Gestion de la short_description via metafield
     if (prod.short_description) {
       if (!input.metafields) input.metafields = [];
@@ -71,6 +79,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               id 
               title 
               descriptionHtml
+              variants(first: 1) {
+                edges {
+                  node {
+                    sku
+                    barcode
+                  }
+                }
+              }
               seo {
                 title
                 description
@@ -93,6 +109,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               id 
               title 
               descriptionHtml
+              variants(first: 1) {
+                edges {
+                  node {
+                    sku
+                    barcode
+                  }
+                }
+              }
               seo {
                 title
                 description
@@ -125,9 +149,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       createdProduct = data.data?.productCreate?.product;
       creationErrors = data.data?.productCreate?.userErrors || [];
     }
-
-    let imageErrors = [];
-    let appendedImages = [];
 
     // Suppression des images existantes si update
     if (prod.id && createdProduct) {
@@ -208,7 +229,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         })),
       };
 
-      const imageResp = await fetch(adminUrl, {
+      await fetch(adminUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -216,11 +237,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         },
         body: JSON.stringify({ query: imageMutation, variables: imageVariables }),
       });
-
-      const imageData = await imageResp.json();
-
-      appendedImages = imageData.data?.productCreateMedia?.media || [];
-      imageErrors = imageData.data?.productCreateMedia?.mediaUserErrors || [];
     }
 
     // Ajout aux collections
@@ -318,6 +334,31 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     let metaTitle = createdProduct?.seo?.title || null;
     let metaDescription = createdProduct?.seo?.description || null;
     let shortDescription = createdProduct?.metafield?.value || null;
+    let sku = createdProduct?.variants?.edges?.[0]?.node?.sku || null;
+    let ean = createdProduct?.variants?.edges?.[0]?.node?.barcode || null;
+    
+    // Récupération des metafields séparément
+    if (createdProduct) {
+      const metafieldsQuery = `
+        query getProductMetafields($id: ID!) {
+          product(id: $id) {
+            shortDescriptionMetafield: metafield(namespace: "custom", key: "short_description") {
+              value
+            }
+          }
+        }
+      `;
+      const metafieldsResp = await fetch(adminUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Access-Token': token,
+        },
+        body: JSON.stringify({ query: metafieldsQuery, variables: { id: createdProduct.id } }),
+      });
+      const metafieldsData = await metafieldsResp.json();
+      shortDescription = metafieldsData.data?.product?.shortDescriptionMetafield?.value || shortDescription;
+    }
     
     if (creationErrors && creationErrors.length) {
       status = "error";
@@ -331,7 +372,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       upsellr_raw_id: upsellrRawId,
       meta_title: metaTitle,
       meta_description: metaDescription,
-      short_description: shortDescription
+      short_description: shortDescription,
+      sku: sku,
+      ean: ean
     });
   }
 
