@@ -4,343 +4,324 @@ import { getShopifyAdminFromToken } from "../utils/shopify-auth";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   console.log("==> /upsellr/products-import called");
+
+  // Vérif méthode
   if (request.method !== "POST") {
     console.log("Mauvaise méthode :", request.method);
-    return json({ success: false, error: "Méthode non autorisée. Utilisez POST." }, { status: 405 });
+    return json(
+      { success: false, error: "Méthode non autorisée. Utilisez POST." },
+      { status: 405 },
+    );
   }
 
+  // Auth Shopify
   const shopifyAuth = await getShopifyAdminFromToken(request);
   if (shopifyAuth.error) {
-    return json({ success: false, error: shopifyAuth.error.message }, { status: shopifyAuth.error.status });
+    return json(
+      { success: false, error: shopifyAuth.error.message },
+      { status: shopifyAuth.error.status },
+    );
   }
-  
   const { token, adminUrl } = shopifyAuth;
 
+  // Lecture body
   let body: any;
   try {
     body = await request.json();
-  } catch (err) {
-    return json({ success: false, error: "Body JSON invalide" }, { status: 400 });
+  } catch {
+    return json(
+      { success: false, error: "Body JSON invalide" },
+      { status: 400 },
+    );
   }
-
   if (!body.products || !Array.isArray(body.products)) {
-    return json({ success: false, error: "Le body doit contenir un tableau 'products'" }, { status: 400 });
+    return json(
+      { success: false, error: "Le body doit contenir un tableau 'products'" },
+      { status: 400 },
+    );
   }
 
   const results: any[] = [];
+
   for (const prod of body.products) {
     if (!prod.title && !prod.id) continue;
 
     const upsellrRawId = prod.upsellr_raw_id ?? null;
+    const input: any = { title: prod.title };
 
-    const input: any = {
-      title: prod.title,
-    };
+    // Champs de base
     if (prod.description) input.descriptionHtml = prod.description;
     if (prod.status) input.status = prod.status;
     if (prod.vendor) input.vendor = prod.vendor;
     if (prod.productType) input.productType = prod.productType;
-    if (prod.tags) input.tags = Array.isArray(prod.tags) ? prod.tags : [prod.tags];
+    if (prod.tags)
+      input.tags = Array.isArray(prod.tags) ? prod.tags : [prod.tags];
     if (prod.meta_title) input.seo = { ...input.seo, title: prod.meta_title };
-    if (prod.meta_description) input.seo = { ...input.seo, description: prod.meta_description };
-    
-    // Gestion du SKU et EAN dans les variants
-    if (prod.sku || prod.ean) {
-      input.variants = [{
-        ...(prod.sku && { sku: prod.sku }),
-        ...(prod.ean && { barcode: prod.ean })
-      }];
-    }
-    
-    // Gestion de la short_description via metafield
+    if (prod.meta_description)
+      input.seo = { ...input.seo, description: prod.meta_description };
+
+    // Short description
     if (prod.short_description) {
-      if (!input.metafields) input.metafields = [];
-      input.metafields.push({
-        namespace: "custom",
-        key: "short_description",
-        value: prod.short_description,
-        type: "string"
-      });
+      input.metafields = [
+        {
+          namespace: "custom",
+          key: "short_description",
+          value: prod.short_description,
+          type: "string",
+        },
+      ];
     }
-    
-    if (prod.id) input.id = prod.id;
 
-    let mutation: string;
-    let variables: any;
-    let createdProduct: any = null;
-    let creationErrors: any[] = [];
-
+    // Gestion SKU / EAN
+    let variantId: string | null = null;
     if (prod.id) {
-      // Update existing product
+      // Update → on récupère variantId
+      input.id = prod.id;
+
+      const variantQuery = `
+        query getVariant($id: ID!) {
+          product(id: $id) {
+            variants(first: 1) {
+              edges {
+                node {
+                  id
+                  sku
+                  barcode
+                }
+              }
+            }
+          }
+        }
+      `;
+      const variantResp = await fetch(adminUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Shopify-Access-Token": token,
+        },
+        body: JSON.stringify({
+          query: variantQuery,
+          variables: { id: prod.id },
+        }),
+      });
+      const variantData = await variantResp.json();
+      variantId =
+        variantData.data?.product?.variants?.edges?.[0]?.node?.id || null;
+    }
+
+    if (prod.sku || prod.ean) {
+      const variantInput: any = {};
+      if (variantId) variantInput.id = variantId; // seulement en update
+      if (prod.sku) variantInput.sku = prod.sku;
+      if (prod.ean) variantInput.barcode = prod.ean;
+      input.variants = [variantInput];
+    }
+
+    // Mutation
+    let mutation: string;
+    if (prod.id) {
       mutation = `
         mutation productUpdate($input: ProductInput!) {
           productUpdate(input: $input) {
-            product { 
-              id 
-              title 
+            product {
+              id title
               descriptionHtml
-              variants(first: 1) {
-                edges {
-                  node {
-                    sku
-                    barcode
-                  }
-                }
-              }
-              seo {
-                title
-                description
-              }
-              metafield(namespace: "custom", key: "short_description") {
-                value
-              }
+              variants(first: 1) { edges { node { id sku barcode } } }
+              seo { title description }
+              metafield(namespace: "custom", key: "short_description") { value }
             }
             userErrors { field message }
           }
         }
       `;
-      variables = { input };
     } else {
-      // Create new product
       mutation = `
         mutation productCreate($input: ProductInput!) {
           productCreate(input: $input) {
-            product { 
-              id 
-              title 
+            product {
+              id title
               descriptionHtml
-              variants(first: 1) {
-                edges {
-                  node {
-                    sku
-                    barcode
-                  }
-                }
-              }
-              seo {
-                title
-                description
-              }
-              metafield(namespace: "custom", key: "short_description") {
-                value
-              }
+              variants(first: 1) { edges { node { id sku barcode } } }
+              seo { title description }
+              metafield(namespace: "custom", key: "short_description") { value }
             }
             userErrors { field message }
           }
         }
       `;
-      variables = { input };
     }
 
     const resp = await fetch(adminUrl, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'X-Shopify-Access-Token': token,
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": token,
       },
-      body: JSON.stringify({ query: mutation, variables }),
+      body: JSON.stringify({ query: mutation, variables: { input } }),
     });
 
     const data = await resp.json();
-    if (prod.id) {
-      createdProduct = data.data?.productUpdate?.product;
-      creationErrors = data.data?.productUpdate?.userErrors || [];
-    } else {
-      createdProduct = data.data?.productCreate?.product;
-      creationErrors = data.data?.productCreate?.userErrors || [];
-    }
+    const resultData = prod.id
+      ? data.data?.productUpdate
+      : data.data?.productCreate;
+    const createdProduct = resultData?.product;
+    const creationErrors = resultData?.userErrors || [];
 
-    // Suppression des images existantes si update
+    // Suppression images si update
     if (prod.id && createdProduct) {
-      // 1. Récupérer les media (images) existants du produit
       const getMediaQuery = `
-        query getProductMedia($id: ID!) {
+        query getMedia($id: ID!) {
           product(id: $id) {
             media(first: 100) {
-              edges {
-                node {
-                  ... on MediaImage {
-                    id
-                  }
-                }
-              }
+              edges { node { ... on MediaImage { id } } }
             }
           }
         }
       `;
       const getMediaResp = await fetch(adminUrl, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'X-Shopify-Access-Token': token,
+          "Content-Type": "application/json",
+          "X-Shopify-Access-Token": token,
         },
-        body: JSON.stringify({ query: getMediaQuery, variables: { id: createdProduct.id } }),
+        body: JSON.stringify({
+          query: getMediaQuery,
+          variables: { id: createdProduct.id },
+        }),
       });
-      const getMediaData = await getMediaResp.json();
-      const mediaEdges = getMediaData.data?.product?.media?.edges || [];
-      const mediaIds = mediaEdges.map((edge: any) => edge.node?.id).filter(Boolean);
+      const mediaEdges =
+        (await getMediaResp.json()).data?.product?.media?.edges || [];
+      const mediaIds = mediaEdges
+        .map((edge: any) => edge.node?.id)
+        .filter(Boolean);
+
       if (mediaIds.length > 0) {
         const deleteMediaMutation = `
           mutation productDeleteMedia($productId: ID!, $mediaIds: [ID!]!) {
             productDeleteMedia(productId: $productId, mediaIds: $mediaIds) {
-              deletedMediaIds
-              userErrors { field message }
+              deletedMediaIds userErrors { field message }
             }
           }
         `;
         await fetch(adminUrl, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
-            'X-Shopify-Access-Token': token,
+            "Content-Type": "application/json",
+            "X-Shopify-Access-Token": token,
           },
-          body: JSON.stringify({ query: deleteMediaMutation, variables: { productId: createdProduct.id, mediaIds } }),
+          body: JSON.stringify({
+            query: deleteMediaMutation,
+            variables: { productId: createdProduct.id, mediaIds },
+          }),
         });
       }
     }
 
-    // Étape 2 : Ajout des images séparément
+    // Ajout images
     if (createdProduct && prod.images?.length) {
       const imageMutation = `
         mutation productCreateMedia($productId: ID!, $media: [CreateMediaInput!]!) {
           productCreateMedia(productId: $productId, media: $media) {
-            media {
-              ... on MediaImage {
-                id
-                image {
-                  id
-                  originalSrc
-                }
-              }
-            }
-            mediaUserErrors {
-              field
-              message
-            }
+            media { ... on MediaImage { id image { id originalSrc } } }
+            mediaUserErrors { field message }
           }
         }
       `;
-
-      const imageVariables = {
-        productId: createdProduct.id,
-        media: prod.images.map((src: string) => ({
-          originalSource: src,
-          mediaContentType: "IMAGE"
-        })),
-      };
-
       await fetch(adminUrl, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'X-Shopify-Access-Token': token,
+          "Content-Type": "application/json",
+          "X-Shopify-Access-Token": token,
         },
-        body: JSON.stringify({ query: imageMutation, variables: imageVariables }),
+        body: JSON.stringify({
+          query: imageMutation,
+          variables: {
+            productId: createdProduct.id,
+            media: prod.images.map((src: string) => ({
+              originalSource: src,
+              mediaContentType: "IMAGE",
+            })),
+          },
+        }),
       });
     }
 
-    // Ajout aux collections
+    // Collections
     let collectionErrors: any[] = [];
     if (createdProduct) {
-      // Si update, retirer le produit de toutes les collections existantes avant d'ajouter les nouvelles (ou rien si prod.collections vide)
       if (prod.id) {
-        // 1. Récupérer toutes les collections du produit
         const getCollectionsQuery = `
-          query getProductCollections($id: ID!) {
-            product(id: $id) {
-              collections(first: 100) {
-                edges { node { id } }
-              }
-            }
+          query getCollections($id: ID!) {
+            product(id: $id) { collections(first: 100) { edges { node { id } } } }
           }
         `;
         const getCollectionsResp = await fetch(adminUrl, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
-            'X-Shopify-Access-Token': token,
+            "Content-Type": "application/json",
+            "X-Shopify-Access-Token": token,
           },
-          body: JSON.stringify({ query: getCollectionsQuery, variables: { id: createdProduct.id } }),
+          body: JSON.stringify({
+            query: getCollectionsQuery,
+            variables: { id: createdProduct.id },
+          }),
         });
-        const getCollectionsData = await getCollectionsResp.json();
-        const currentCollections = getCollectionsData.data?.product?.collections?.edges?.map((edge: any) => edge.node.id) || [];
-        // 2. Retirer le produit de chaque collection
-        for (const collectionId of currentCollections) {
-          const removeFromCollectionMutation = `
-            mutation removeProductFromCollection($id: ID!, $productIds: [ID!]!) {
+        const currentCollections =
+          (
+            await getCollectionsResp.json()
+          ).data?.product?.collections?.edges?.map((e: any) => e.node.id) || [];
+
+        for (const colId of currentCollections) {
+          const removeMutation = `
+            mutation removeProduct($id: ID!, $productIds: [ID!]!) {
               collectionRemoveProducts(id: $id, productIds: $productIds) {
                 userErrors { field message }
               }
             }
           `;
-          const removeResp = await fetch(adminUrl, {
-            method: 'POST',
+          await fetch(adminUrl, {
+            method: "POST",
             headers: {
-              'Content-Type': 'application/json',
-              'X-Shopify-Access-Token': token,
+              "Content-Type": "application/json",
+              "X-Shopify-Access-Token": token,
             },
             body: JSON.stringify({
-              query: removeFromCollectionMutation,
-              variables: { id: collectionId, productIds: [createdProduct.id] },
+              query: removeMutation,
+              variables: { id: colId, productIds: [createdProduct.id] },
             }),
           });
-          const removeData = await removeResp.json();
-          if (removeData.errors || removeData.data?.collectionRemoveProducts?.userErrors?.length) {
-            collectionErrors.push({
-              collectionId,
-              errors: removeData.errors,
-              userErrors: removeData.data?.collectionRemoveProducts?.userErrors
-            });
-          }
         }
       }
-      // Ajout aux nouvelles collections (logique existante)
-      if (prod.collections && prod.collections.length) {
-        for (const collectionId of prod.collections) {
-          const addToCollectionMutation = `
-            mutation addProductToCollection($id: ID!, $productIds: [ID!]!) {
+
+      if (prod.collections?.length) {
+        for (const colId of prod.collections) {
+          const addMutation = `
+            mutation addProduct($id: ID!, $productIds: [ID!]!) {
               collectionAddProducts(id: $id, productIds: $productIds) {
                 userErrors { field message }
               }
             }
           `;
-          const collectionResp = await fetch(adminUrl, {
-            method: 'POST',
+          await fetch(adminUrl, {
+            method: "POST",
             headers: {
-              'Content-Type': 'application/json',
-              'X-Shopify-Access-Token': token,
+              "Content-Type": "application/json",
+              "X-Shopify-Access-Token": token,
             },
             body: JSON.stringify({
-              query: addToCollectionMutation,
-              variables: { id: collectionId, productIds: [createdProduct.id] },
+              query: addMutation,
+              variables: { id: colId, productIds: [createdProduct.id] },
             }),
           });
-
-          const collectionData = await collectionResp.json();
-          if (collectionData.errors || collectionData.data?.collectionAddProducts?.userErrors?.length) {
-            collectionErrors.push({
-              collectionId,
-              errors: collectionData.errors,
-              userErrors: collectionData.data?.collectionAddProducts?.userErrors
-            });
-          }
         }
       }
     }
 
-    let status = "ok";
-    let error = null;
-    let shopifyId = createdProduct?.id || null;
-    let metaTitle = createdProduct?.seo?.title || null;
-    let metaDescription = createdProduct?.seo?.description || null;
+    // Metafields refresh
     let shortDescription = createdProduct?.metafield?.value || null;
-    let sku = createdProduct?.variants?.edges?.[0]?.node?.sku || null;
-    let ean = createdProduct?.variants?.edges?.[0]?.node?.barcode || null;
-    
-    // Récupération des metafields séparément
     if (createdProduct) {
       const metafieldsQuery = `
-        query getProductMetafields($id: ID!) {
+        query getMetafields($id: ID!) {
           product(id: $id) {
             shortDescriptionMetafield: metafield(namespace: "custom", key: "short_description") {
               value
@@ -348,37 +329,36 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           }
         }
       `;
-      const metafieldsResp = await fetch(adminUrl, {
-        method: 'POST',
+      const metaResp = await fetch(adminUrl, {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'X-Shopify-Access-Token': token,
+          "Content-Type": "application/json",
+          "X-Shopify-Access-Token": token,
         },
-        body: JSON.stringify({ query: metafieldsQuery, variables: { id: createdProduct.id } }),
+        body: JSON.stringify({
+          query: metafieldsQuery,
+          variables: { id: createdProduct.id },
+        }),
       });
-      const metafieldsData = await metafieldsResp.json();
-      shortDescription = metafieldsData.data?.product?.shortDescriptionMetafield?.value || shortDescription;
-    }
-    
-    if (creationErrors && creationErrors.length) {
-      status = "error";
-      error = creationErrors.map(e => e.message).join(", ");
+      shortDescription =
+        (await metaResp.json()).data?.product?.shortDescriptionMetafield
+          ?.value || shortDescription;
     }
 
     results.push({
-      status,
-      error,
-      shopify_id: shopifyId,
+      status: creationErrors.length ? "error" : "ok",
+      error: creationErrors.length
+        ? creationErrors.map((e: any) => e.message).join(", ")
+        : null,
+      shopify_id: createdProduct?.id || null,
       upsellr_raw_id: upsellrRawId,
-      meta_title: metaTitle,
-      meta_description: metaDescription,
+      meta_title: createdProduct?.seo?.title || null,
+      meta_description: createdProduct?.seo?.description || null,
       short_description: shortDescription,
-      sku: sku,
-      ean: ean
+      sku: createdProduct?.variants?.edges?.[0]?.node?.sku || null,
+      ean: createdProduct?.variants?.edges?.[0]?.node?.barcode || null,
     });
   }
 
-  return json({
-    results
-  });
+  return json({ results });
 };
