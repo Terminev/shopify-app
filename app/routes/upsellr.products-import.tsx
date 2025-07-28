@@ -229,6 +229,210 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
 
+    /* --- MAJ des images --- */
+
+    // Suppression des images existantes si update
+    if (prod.id && createdProduct) {
+      // 1. Récupérer les media (images) existants du produit
+      const getMediaQuery = `
+        query getProductMedia($id: ID!) {
+          product(id: $id) {
+            media(first: 100) {
+              edges {
+                node {
+                  ... on MediaImage {
+                    id
+                  }
+                }
+              }
+            }
+          }
+        }
+      `;
+      const getMediaResp = await fetch(adminUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Shopify-Access-Token": token,
+        },
+        body: JSON.stringify({
+          query: getMediaQuery,
+          variables: { id: createdProduct.id },
+        }),
+      });
+      const getMediaData = await getMediaResp.json();
+      const mediaEdges = getMediaData.data?.product?.media?.edges || [];
+      const mediaIds = mediaEdges
+        .map((edge: any) => edge.node?.id)
+        .filter(Boolean);
+      if (mediaIds.length > 0) {
+        const deleteMediaMutation = `
+          mutation productDeleteMedia($productId: ID!, $mediaIds: [ID!]!) {
+            productDeleteMedia(productId: $productId, mediaIds: $mediaIds) {
+              deletedMediaIds
+              userErrors { field message }
+            }
+          }
+        `;
+        await fetch(adminUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Shopify-Access-Token": token,
+          },
+          body: JSON.stringify({
+            query: deleteMediaMutation,
+            variables: { productId: createdProduct.id, mediaIds },
+          }),
+        });
+      }
+    }
+
+    // Étape 2 : Ajout des images séparément
+    if (createdProduct && prod.images?.length) {
+      const imageMutation = `
+        mutation productCreateMedia($productId: ID!, $media: [CreateMediaInput!]!) {
+          productCreateMedia(productId: $productId, media: $media) {
+            media {
+              ... on MediaImage {
+                id
+                image {
+                  id
+                  originalSrc
+                }
+              }
+            }
+            mediaUserErrors {
+              field
+              message
+            }
+          }
+        }
+      `;
+
+      const imageVariables = {
+        productId: createdProduct.id,
+        media: prod.images.map((src: string) => ({
+          originalSource: src,
+          mediaContentType: "IMAGE",
+        })),
+      };
+
+      await fetch(adminUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Shopify-Access-Token": token,
+        },
+        body: JSON.stringify({
+          query: imageMutation,
+          variables: imageVariables,
+        }),
+      });
+    }
+
+    // Ajout aux collections
+    let collectionErrors: any[] = [];
+    if (createdProduct) {
+      // Si update, retirer le produit de toutes les collections existantes avant d'ajouter les nouvelles (ou rien si prod.collections vide)
+      if (prod.id) {
+        // 1. Récupérer toutes les collections du produit
+        const getCollectionsQuery = `
+          query getProductCollections($id: ID!) {
+            product(id: $id) {
+              collections(first: 100) {
+                edges { node { id } }
+              }
+            }
+          }
+        `;
+        const getCollectionsResp = await fetch(adminUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Shopify-Access-Token": token,
+          },
+          body: JSON.stringify({
+            query: getCollectionsQuery,
+            variables: { id: createdProduct.id },
+          }),
+        });
+        const getCollectionsData = await getCollectionsResp.json();
+        const currentCollections =
+          getCollectionsData.data?.product?.collections?.edges?.map(
+            (edge: any) => edge.node.id,
+          ) || [];
+        // 2. Retirer le produit de chaque collection
+        for (const collectionId of currentCollections) {
+          const removeFromCollectionMutation = `
+            mutation removeProductFromCollection($id: ID!, $productIds: [ID!]!) {
+              collectionRemoveProducts(id: $id, productIds: $productIds) {
+                userErrors { field message }
+              }
+            }
+          `;
+          const removeResp = await fetch(adminUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Shopify-Access-Token": token,
+            },
+            body: JSON.stringify({
+              query: removeFromCollectionMutation,
+              variables: { id: collectionId, productIds: [createdProduct.id] },
+            }),
+          });
+          const removeData = await removeResp.json();
+          if (
+            removeData.errors ||
+            removeData.data?.collectionRemoveProducts?.userErrors?.length
+          ) {
+            collectionErrors.push({
+              collectionId,
+              errors: removeData.errors,
+              userErrors: removeData.data?.collectionRemoveProducts?.userErrors,
+            });
+          }
+        }
+      }
+      // Ajout aux nouvelles collections (logique existante)
+      if (prod.collections && prod.collections.length) {
+        for (const collectionId of prod.collections) {
+          const addToCollectionMutation = `
+            mutation addProductToCollection($id: ID!, $productIds: [ID!]!) {
+              collectionAddProducts(id: $id, productIds: $productIds) {
+                userErrors { field message }
+              }
+            }
+          `;
+          const collectionResp = await fetch(adminUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Shopify-Access-Token": token,
+            },
+            body: JSON.stringify({
+              query: addToCollectionMutation,
+              variables: { id: collectionId, productIds: [createdProduct.id] },
+            }),
+          });
+
+          const collectionData = await collectionResp.json();
+          if (
+            collectionData.errors ||
+            collectionData.data?.collectionAddProducts?.userErrors?.length
+          ) {
+            collectionErrors.push({
+              collectionId,
+              errors: collectionData.errors,
+              userErrors:
+                collectionData.data?.collectionAddProducts?.userErrors,
+            });
+          }
+        }
+      }
+    }
+
     results.push({
       status: creationErrors.length ? "error" : "ok",
       error: creationErrors.map((e: any) => e.message).join(", ") || null,
