@@ -14,7 +14,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ success: false, error: shopifyAuth.error.message }, { status: shopifyAuth.error.status });
   }
   
-  const { token, shopDomain, adminUrl } = shopifyAuth;
+  const { token, adminUrl } = shopifyAuth;
 
   let body;
   try {
@@ -28,8 +28,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   const results = [];
+  console.log("=== DÉBUT TRAITEMENT PRODUITS ===");
+  console.log("Nombre de produits à traiter:", body.products.length);
+  
   for (const prod of body.products) {
-    if (!prod.title && !prod.id) continue;
+    console.log("=== TRAITEMENT PRODUIT ===");
+    console.log("Produit:", { title: prod.title, id: prod.id, sku: prod.sku, ean: prod.ean });
+    
+    if (!prod.title && !prod.id) {
+      console.log("Produit ignoré: pas de title ni d'id");
+      continue;
+    }
 
     const upsellrRawId = prod.upsellr_raw_id ?? null;
 
@@ -118,15 +127,27 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
 
     const data = await resp.json();
+    console.log("=== RÉPONSE MUTATION PRODUIT ===");
+    console.log("Réponse complète:", JSON.stringify(data, null, 2));
+    
     if (prod.id) {
       createdProduct = data.data?.productUpdate?.product;
       creationErrors = data.data?.productUpdate?.userErrors || [];
+      console.log("Produit mis à jour:", createdProduct?.id);
     } else {
       createdProduct = data.data?.productCreate?.product;
       creationErrors = data.data?.productCreate?.userErrors || [];
+      console.log("Produit créé:", createdProduct?.id);
+    }
+    
+    if (creationErrors.length > 0) {
+      console.log("Erreurs de création/mise à jour:", creationErrors);
     }
 
     // === AJOUT/UPDATE DES VARIANTES (SKU/BARCODE) ===
+    console.log("=== TRAITEMENT DES VARIANTES ===");
+    console.log("Variants à traiter:", prod.variants);
+    
     if (createdProduct && prod.variants && prod.variants.length) {
       // 1. Récupérer les variants existants du produit
       const getVariantsQuery = `
@@ -159,7 +180,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       });
 
       const getVariantsData = await getVariantsResp.json();
+      console.log("=== RÉCUPÉRATION DES VARIANTES EXISTANTES ===");
+      console.log("Réponse getVariants:", JSON.stringify(getVariantsData, null, 2));
+      
       const existingVariants = getVariantsData.data?.product?.variants?.edges || [];
+      console.log("Variants existants trouvés:", existingVariants.length);
+      existingVariants.forEach((edge: any, index: number) => {
+        console.log(`Variant ${index}:`, edge.node);
+      });
 
       // 2. Préparer les variants pour la mise à jour
       const variantsInput = prod.variants.map((variantUpdate: any, index: number) => {
@@ -181,6 +209,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         
         return v;
       }).filter((v: any) => v.id); // Ne garder que les variants avec un ID
+
+      console.log("=== PRÉPARATION DES VARIANTES POUR MISE À JOUR ===");
+      console.log("Variants préparés:", variantsInput);
 
       if (variantsInput.length > 0) {
         const variantMutation = `
@@ -216,8 +247,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         });
 
         const variantData = await variantResp.json();
+        console.log("=== RÉPONSE MISE À JOUR DES VARIANTES ===");
+        console.log("Réponse complète:", JSON.stringify(variantData, null, 2));
+        
         if (variantData.data?.productVariantsBulkUpdate?.userErrors?.length) {
           console.log("Erreurs lors de la mise à jour des variants:", variantData.data.productVariantsBulkUpdate.userErrors);
+        } else {
+          console.log("Variants mis à jour avec succès:", variantData.data?.productVariantsBulkUpdate?.productVariants);
         }
       }
     }
@@ -271,8 +307,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     // Ajout des images séparément
-    let imageErrors = [];
-    let appendedImages = [];
+    console.log("=== TRAITEMENT DES IMAGES ===");
     if (createdProduct && prod.images?.length) {
       const imageMutation = `
         mutation productCreateMedia($productId: ID!, $media: [CreateMediaInput!]!) {
@@ -313,8 +348,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
       const imageData = await imageResp.json();
 
-      appendedImages = imageData.data?.productCreateMedia?.media || [];
-      imageErrors = imageData.data?.productCreateMedia?.mediaUserErrors || [];
+      // Log des résultats d'images
+      console.log("=== RÉSULTATS IMAGES ===");
+      console.log("Images ajoutées:", imageData.data?.productCreateMedia?.media || []);
+      console.log("Erreurs images:", imageData.data?.productCreateMedia?.mediaUserErrors || []);
     }
 
     // Ajout aux collections
@@ -416,6 +453,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       error = creationErrors.map((e: any) => e.message).join(", ");
     }
 
+    console.log("=== RÉSULTAT FINAL ===");
+    console.log("Status:", status);
+    console.log("Error:", error);
+    console.log("Shopify ID:", shopifyId);
+    
     results.push({
       status,
       error,
