@@ -202,7 +202,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           v.id = existingVariants[index].node.id;
         }
         
-        // Ajouter les champs à mettre à jour
+        // Ajouter les champs à mettre à jour avec la bonne structure
         if (variantUpdate.sku !== undefined) v.sku = variantUpdate.sku;
         if (variantUpdate.barcode !== undefined) v.barcode = variantUpdate.barcode;
         if (variantUpdate.price !== undefined) v.price = variantUpdate.price;
@@ -214,47 +214,55 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       console.log("Variants préparés:", variantsInput);
 
       if (variantsInput.length > 0) {
-        const variantMutation = `
-          mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
-            productVariantsBulkUpdate(productId: $productId, variants: $variants) {
-              productVariants {
-                id
-                sku
-                barcode
-                price
-              }
-              userErrors {
-                field
-                message
-              }
-            }
-          }
-        `;
-
-        const variantResp = await fetch(adminUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Shopify-Access-Token': token,
-          },
-          body: JSON.stringify({
-            query: variantMutation,
-            variables: {
-              productId: createdProduct.id,
-              variants: variantsInput
-            }
-          }),
-        });
-
-        const variantData = await variantResp.json();
-        console.log("=== RÉPONSE MISE À JOUR DES VARIANTES ===");
-        console.log("Réponse complète:", JSON.stringify(variantData, null, 2));
+        // Mettre à jour chaque variant individuellement
+        const updatedVariants = [];
         
-        if (variantData.data?.productVariantsBulkUpdate?.userErrors?.length) {
-          console.log("Erreurs lors de la mise à jour des variants:", variantData.data.productVariantsBulkUpdate.userErrors);
-        } else {
-          console.log("Variants mis à jour avec succès:", variantData.data?.productVariantsBulkUpdate?.productVariants);
+        for (const variantInput of variantsInput) {
+          const variantMutation = `
+            mutation productVariantUpdate($input: ProductVariantInput!) {
+              productVariantUpdate(input: $input) {
+                productVariant {
+                  id
+                  sku
+                  barcode
+                  price
+                }
+                userErrors {
+                  field
+                  message
+                }
+              }
+            }
+          `;
+
+          const variantResp = await fetch(adminUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Shopify-Access-Token': token,
+            },
+            body: JSON.stringify({
+              query: variantMutation,
+              variables: {
+                input: variantInput
+              }
+            }),
+          });
+
+          const variantData = await variantResp.json();
+          console.log(`=== RÉPONSE MISE À JOUR VARIANT ${variantInput.id} ===`);
+          console.log("Réponse complète:", JSON.stringify(variantData, null, 2));
+          
+          if (variantData.data?.productVariantUpdate?.userErrors?.length) {
+            console.log("Erreurs lors de la mise à jour du variant:", variantData.data.productVariantUpdate.userErrors);
+          } else {
+            console.log("Variant mis à jour avec succès:", variantData.data?.productVariantUpdate?.productVariant);
+            updatedVariants.push(variantData.data?.productVariantUpdate?.productVariant);
+          }
         }
+        
+        console.log("=== RÉSUMÉ MISE À JOUR DES VARIANTES ===");
+        console.log("Variants mis à jour:", updatedVariants);
       }
     }
 
