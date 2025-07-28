@@ -129,11 +129,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     console.log("✅ Produit créé/mis à jour :", createdProduct.id);
 
     // --- MAJ SKU / Barcode ---
-if (prod.sku || prod.barcode || (prod.variants && prod.variants.length > 0)) {
-  console.log("==> Début mise à jour SKU/EAN pour :", createdProduct.id);
+    if (prod.sku || prod.ean || (prod.variants && prod.variants.length > 0)) {
+      console.log("==> Début mise à jour SKU/EAN pour :", createdProduct.id);
 
-  try {
-    const getVariantsQuery = `
+      try {
+        const getVariantsQuery = `
       query getProductVariants($id: ID!) {
         product(id: $id) {
           variants(first: 50) {
@@ -144,82 +144,90 @@ if (prod.sku || prod.barcode || (prod.variants && prod.variants.length > 0)) {
         }
       }
     `;
-    console.log("📡 Fetch variants pour :", createdProduct.id);
-    const variantsResp = await fetch(adminUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Shopify-Access-Token": token,
-      },
-      body: JSON.stringify({
-        query: getVariantsQuery,
-        variables: { id: createdProduct.id },
-      }),
-    });
-    const variantsData = await variantsResp.json();
-    console.log(
-      "📥 Variants data :",
-      JSON.stringify(variantsData, null, 2),
-    );
-
-    const variants = variantsData.data?.product?.variants?.edges || [];
-    if (!variants.length) {
-      console.error("⚠️ Aucune variante trouvée → impossible MAJ SKU/EAN");
-    } else {
-      console.log(`✅ ${variants.length} variante(s) trouvée(s)`);
-
-      // Utiliser l'API REST pour mettre à jour les variantes (plus fiable pour sku/barcode)
-      for (let i = 0; i < variants.length; i++) {
-        const variant = variants[i];
-        let sku = variant.node.sku;
-        let barcode = variant.node.barcode;
-
-        if (prod.variants && prod.variants.length > i) {
-          if (prod.variants[i].sku) sku = prod.variants[i].sku;
-          if (prod.variants[i].barcode) barcode = prod.variants[i].barcode;
-        } else {
-          if (prod.sku) sku = prod.sku;
-          if (prod.barcode) barcode = prod.barcode;
-        }
-
-        // Extraire l'ID de la variante de l'URL GraphQL
-        const variantId = variant.node.id.split('/').pop();
-        const restUrl = `https://${shopifyAuth.shopDomain}/admin/api/2024-01/variants/${variantId}.json`;
-        
-        const variantData = {
-          variant: {
-            id: variantId,
-            sku: sku || null,
-            barcode: barcode || null
-          }
-        };
-
-        console.log(`📤 REST Update variante ${i + 1}:`, JSON.stringify(variantData, null, 2));
-
-        const restResp = await fetch(restUrl, {
-          method: "PUT",
+        console.log("📡 Fetch variants pour :", createdProduct.id);
+        const variantsResp = await fetch(adminUrl, {
+          method: "POST",
           headers: {
             "Content-Type": "application/json",
             "X-Shopify-Access-Token": token,
           },
-          body: JSON.stringify(variantData),
+          body: JSON.stringify({
+            query: getVariantsQuery,
+            variables: { id: createdProduct.id },
+          }),
         });
+        const variantsData = await variantsResp.json();
+        console.log(
+          "📥 Variants data :",
+          JSON.stringify(variantsData, null, 2),
+        );
 
-        const restData = await restResp.json();
-        console.log(`📥 Résultat REST variante ${i + 1}:`, JSON.stringify(restData, null, 2));
-
-        if (restResp.ok) {
-          console.log(`✅ Variante ${i + 1} mise à jour via REST API !`);
+        const variants = variantsData.data?.product?.variants?.edges || [];
+        if (!variants.length) {
+          console.error("⚠️ Aucune variante trouvée → impossible MAJ SKU/EAN");
         } else {
-          console.error(`❌ Erreur REST variante ${i + 1}:`, JSON.stringify(restData, null, 2));
+          console.log(`✅ ${variants.length} variante(s) trouvée(s)`);
+
+          // Utiliser l'API REST pour mettre à jour les variantes (plus fiable pour sku/barcode)
+          for (let i = 0; i < variants.length; i++) {
+            const variant = variants[i];
+            let sku = variant.node.sku;
+            let barcode = variant.node.barcode;
+
+            if (prod.variants && prod.variants.length > i) {
+              if (prod.variants[i].sku) sku = prod.variants[i].sku;
+              if (prod.variants[i].ean) barcode = prod.variants[i].ean; // Utiliser 'ean' du body
+            } else {
+              if (prod.sku) sku = prod.sku;
+              if (prod.ean) barcode = prod.ean; // Utiliser 'ean' du body
+            }
+
+            // Extraire l'ID de la variante de l'URL GraphQL
+            const variantId = variant.node.id.split("/").pop();
+            const restUrl = `https://${shopifyAuth.shopDomain}/admin/api/2024-01/variants/${variantId}.json`;
+
+            const variantData = {
+              variant: {
+                id: variantId,
+                sku: sku || null,
+                barcode: barcode || null, // Utiliser 'barcode' pour Shopify
+              },
+            };
+
+            console.log(
+              `📤 REST Update variante ${i + 1}:`,
+              JSON.stringify(variantData, null, 2),
+            );
+
+            const restResp = await fetch(restUrl, {
+              method: "PUT",
+              headers: {
+                "Content-Type": "application/json",
+                "X-Shopify-Access-Token": token,
+              },
+              body: JSON.stringify(variantData),
+            });
+
+            const restData = await restResp.json();
+            console.log(
+              `📥 Résultat REST variante ${i + 1}:`,
+              JSON.stringify(restData, null, 2),
+            );
+
+            if (restResp.ok) {
+              console.log(`✅ Variante ${i + 1} mise à jour via REST API !`);
+            } else {
+              console.error(
+                `❌ Erreur REST variante ${i + 1}:`,
+                JSON.stringify(restData, null, 2),
+              );
+            }
+          }
         }
+      } catch (err) {
+        console.error("💥 Erreur MAJ SKU/EAN :", err);
       }
     }
-  } catch (err) {
-    console.error("💥 Erreur MAJ SKU/EAN :", err);
-  }
-}
-
 
     results.push({
       status: creationErrors.length ? "error" : "ok",
