@@ -163,7 +163,27 @@ export async function getAllProductsWithPagination(adminUrl: string, token: stri
       throw new Error("Réponse Shopify invalide");
     }
     const products = productsData.data.products.edges.map((edge: any) => edge.node);
-    allProducts.push(...products);
+    
+    // Traitement des produits pour extraire SKU et EAN
+    const processedProducts = products.map((product: any) => {
+      if (allProductFields && product.variants?.edges) {
+        // Extraire SKU et EAN du premier variant (ou tous si nécessaire)
+        const variants = product.variants.edges.map((edge: any) => edge.node);
+        const firstVariant = variants[0];
+        
+        return {
+          ...product,
+          sku: firstVariant?.sku || null,
+          ean: firstVariant?.barcode || null,
+          variants_count: variants.length,
+          // Garder les variants complets si nécessaire
+          variants: variants
+        };
+      }
+      return product;
+    });
+    
+    allProducts.push(...processedProducts);
     hasNextPage = productsData.data.products.pageInfo.hasNextPage;
     cursor = productsData.data.products.pageInfo.endCursor;
   }
