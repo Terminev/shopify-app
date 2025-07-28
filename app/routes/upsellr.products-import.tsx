@@ -168,66 +168,68 @@ if (prod.sku || prod.barcode || (prod.variants && prod.variants.length > 0)) {
     } else {
       console.log(`✅ ${variants.length} variante(s) trouvée(s)`);
 
-      // Mise à jour individuelle de chaque variante
-      for (let i = 0; i < variants.length; i++) {
-        const variant = variants[i];
-        let sku = variant.node.sku;
-        let barcode = variant.node.barcode;
-
-        // Déterminer les nouvelles valeurs
-        if (prod.variants && prod.variants.length > i) {
-          if (prod.variants[i].sku) sku = prod.variants[i].sku;
-          if (prod.variants[i].barcode) barcode = prod.variants[i].barcode;
-        } else {
-          if (prod.sku) sku = prod.sku;
-          if (prod.barcode) barcode = prod.barcode;
-        }
-
-        // Mise à jour individuelle de la variante
-        const updateVariantMutation = `
-          mutation productVariantUpdate($input: ProductVariantInput!) {
-            productVariantUpdate(input: $input) {
-              productVariant { id sku barcode }
-              userErrors { field message }
+      // Utiliser productUpdate avec les variantes dans l'input
+      const productUpdateWithVariantsMutation = `
+        mutation productUpdate($input: ProductInput!) {
+          productUpdate(input: $input) {
+            product { 
+              id 
+              title 
+              variants(first: 50) {
+                edges {
+                  node { id title sku barcode }
+                }
+              }
             }
+            userErrors { field message }
           }
-        `;
-
-        const variantInput = {
-          id: variant.node.id,
-          sku: sku || null,
-          barcode: barcode || null,
-        };
-
-        console.log(`📤 Update variante ${i + 1}:`, JSON.stringify(variantInput, null, 2));
-
-        const updateVariantResp = await fetch(adminUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Shopify-Access-Token": token,
-          },
-          body: JSON.stringify({
-            query: updateVariantMutation,
-            variables: { input: variantInput },
-          }),
-        });
-
-        const updateVariantData = await updateVariantResp.json();
-        console.log(
-          `📥 Résultat update variante ${i + 1}:`,
-          JSON.stringify(updateVariantData, null, 2),
-        );
-
-        const errors = updateVariantData.data?.productVariantUpdate?.userErrors || [];
-        if (errors.length) {
-          console.error(
-            `⚠️ Erreurs update variante ${i + 1}:`,
-            JSON.stringify(errors, null, 2),
-          );
-        } else {
-          console.log(`✅ Variante ${i + 1} mise à jour !`);
         }
+      `;
+
+      const productInputWithVariants = {
+        id: createdProduct.id,
+        variants: variants.map((v: any, index: number) => {
+          let sku = v.node.sku;
+          let barcode = v.node.barcode;
+
+          if (prod.variants && prod.variants.length > index) {
+            if (prod.variants[index].sku) sku = prod.variants[index].sku;
+            if (prod.variants[index].barcode) barcode = prod.variants[index].barcode;
+          } else {
+            if (prod.sku) sku = prod.sku;
+            if (prod.barcode) barcode = prod.barcode;
+          }
+
+          return {
+            id: v.node.id,
+            sku: sku || null,
+            barcode: barcode || null,
+          };
+        })
+      };
+
+      console.log("📤 Input ProductUpdate avec variants:", JSON.stringify(productInputWithVariants, null, 2));
+
+      const productUpdateResp = await fetch(adminUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Shopify-Access-Token": token,
+        },
+        body: JSON.stringify({
+          query: productUpdateWithVariantsMutation,
+          variables: { input: productInputWithVariants },
+        }),
+      });
+
+      const productUpdateData = await productUpdateResp.json();
+      console.log("📥 Résultat ProductUpdate:", JSON.stringify(productUpdateData, null, 2));
+
+      const errors = productUpdateData.data?.productUpdate?.userErrors || [];
+      if (errors.length) {
+        console.error("⚠️ Erreurs ProductUpdate:", JSON.stringify(errors, null, 2));
+      } else {
+        console.log("✅ SKU/EAN mis à jour via ProductUpdate !");
       }
     }
   } catch (err) {
