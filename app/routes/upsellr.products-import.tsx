@@ -51,7 +51,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         namespace: "custom",
         key: "short_description",
         value: prod.short_description,
-        type: "text"
+        type: "string"
       });
     }
     
