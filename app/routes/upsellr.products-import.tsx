@@ -185,6 +185,50 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
 
+    if ((createdProduct && prod.sku) || prod.ean) {
+      const variantId = createdProduct?.variants?.edges?.[0]?.node?.id;
+      if (variantId) {
+        const variantUpdateMutation = `
+          mutation UpdateVariantSkuAndEan($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+            productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+              productVariants {
+                id
+                sku
+                barcode
+              }
+              userErrors {
+                field
+                message
+              }
+            }
+          }
+        `;
+
+        const variantUpdateVariables = {
+          productId: createdProduct.id,
+          variants: [
+            {
+              id: variantId,
+              ...(prod.sku && { sku: prod.sku }),
+              ...(prod.ean && { barcode: prod.ean }),
+            },
+          ],
+        };
+
+        await fetch(adminUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Shopify-Access-Token": token,
+          },
+          body: JSON.stringify({
+            query: variantUpdateMutation,
+            variables: variantUpdateVariables,
+          }),
+        });
+      }
+    }
+
     // Suppression images si update
     if (prod.id && createdProduct) {
       const getMediaQuery = `
@@ -380,4 +424,3 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   return json({ results });
 };
- 
