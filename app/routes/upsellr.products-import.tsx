@@ -108,6 +108,110 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       variables = { input };
     }
 
+/* Code pour le SKU et EAN */
+
+    if (prod.sku || prod.barcode) {
+      console.log("==> Début mise à jour SKU/EAN pour produit :", createdProduct?.id);
+    
+      try {
+        // Étape 1 : Récupérer les variantes du produit
+        const getVariantsQuery = `
+          query getProductVariants($id: ID!) {
+            product(id: $id) {
+              variants(first: 50) {
+                edges {
+                  node {
+                    id
+                    title
+                    sku
+                    barcode
+                  }
+                }
+              }
+            }
+          }
+        `;
+        console.log("==> Fetch variants pour :", createdProduct?.id);
+        const variantsResp = await fetch(adminUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Shopify-Access-Token': token,
+          },
+          body: JSON.stringify({ query: getVariantsQuery, variables: { id: createdProduct.id } }),
+        });
+    
+        const variantsData = await variantsResp.json();
+        console.log("==> VariantsData complet :", JSON.stringify(variantsData, null, 2));
+    
+        const variants = variantsData.data?.product?.variants?.edges || [];
+        if (!variants.length) {
+          console.error("⚠️ Aucune variante trouvée pour le produit :", createdProduct?.id);
+        } else {
+          console.log(`✅ ${variants.length} variante(s) trouvée(s)`);
+        }
+    
+        // Étape 2 : Construire la mutation Bulk Update
+        const variantsInput = variants.map((v: any) => ({
+          id: v.node.id,
+          sku: prod.sku || v.node.sku,
+          barcode: prod.barcode || v.node.barcode,
+        }));
+    
+        console.log("==> Input variantsBulkUpdate :", JSON.stringify(variantsInput, null, 2));
+    
+        const updateVariantsMutation = `
+          mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+            productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+              product {
+                id
+              }
+              productVariants {
+                id
+                sku
+                barcode
+              }
+              userErrors {
+                field
+                message
+              }
+            }
+          }
+        `;
+    
+        const updateVariantsResp = await fetch(adminUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Shopify-Access-Token': token,
+          },
+          body: JSON.stringify({
+            query: updateVariantsMutation,
+            variables: { productId: createdProduct.id, variants: variantsInput },
+          }),
+        });
+    
+        const updateVariantsData = await updateVariantsResp.json();
+        console.log("==> Résultat updateVariants :", JSON.stringify(updateVariantsData, null, 2));
+    
+        const errors = updateVariantsData.data?.productVariantsBulkUpdate?.userErrors || [];
+        if (errors.length) {
+          console.error("⚠️ Erreurs lors de la MAJ SKU/EAN :", JSON.stringify(errors, null, 2));
+        } else {
+          console.log("✅ SKU/EAN mis à jour avec succès !");
+        }
+      } catch (err) {
+        console.error("💥 Erreur mise à jour SKU/EAN :", err);
+      }
+    }
+    
+/* Code pour le SKU et EAN */
+
+
+
+
+
+
     const resp = await fetch(adminUrl, {
       method: 'POST',
       headers: {
