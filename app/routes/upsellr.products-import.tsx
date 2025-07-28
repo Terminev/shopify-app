@@ -168,68 +168,66 @@ if (prod.sku || prod.barcode || (prod.variants && prod.variants.length > 0)) {
     } else {
       console.log(`✅ ${variants.length} variante(s) trouvée(s)`);
 
-      // Construction de l’input à partir de prod.variants[] si existant, sinon prod.sku / prod.barcode global
-      const variantsInput = variants.map((v: any, index: number) => {
-        let sku = v.node.sku;
-        let barcode = v.node.barcode;
+      // Mise à jour individuelle de chaque variante
+      for (let i = 0; i < variants.length; i++) {
+        const variant = variants[i];
+        let sku = variant.node.sku;
+        let barcode = variant.node.barcode;
 
-        if (prod.variants && prod.variants.length > index) {
-          if (prod.variants[index].sku) sku = prod.variants[index].sku;
-          if (prod.variants[index].barcode) barcode = prod.variants[index].barcode;
+        // Déterminer les nouvelles valeurs
+        if (prod.variants && prod.variants.length > i) {
+          if (prod.variants[i].sku) sku = prod.variants[i].sku;
+          if (prod.variants[i].barcode) barcode = prod.variants[i].barcode;
         } else {
           if (prod.sku) sku = prod.sku;
           if (prod.barcode) barcode = prod.barcode;
         }
 
-        return {
-          id: v.node.id,
-          sku,
-          barcode,
-        };
-      });
-      console.log(
-        "📤 Input BulkUpdate :",
-        JSON.stringify(variantsInput, null, 2),
-      );
-
-      const updateVariantsMutation = `
-        mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
-          productVariantsBulkUpdate(productId: $productId, variants: $variants) {
-            productVariants { id sku barcode }
-            userErrors { field message }
+        // Mise à jour individuelle de la variante
+        const updateVariantMutation = `
+          mutation productVariantUpdate($input: ProductVariantInput!) {
+            productVariantUpdate(input: $input) {
+              productVariant { id sku barcode }
+              userErrors { field message }
+            }
           }
-        }
-      `;
-      const updateVariantsResp = await fetch(adminUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Shopify-Access-Token": token,
-        },
-        body: JSON.stringify({
-          query: updateVariantsMutation,
-          variables: {
-            productId: createdProduct.id,
-            variants: variantsInput,
-          },
-        }),
-      });
-      const updateVariantsData = await updateVariantsResp.json();
-      console.log(
-        "📥 Résultat BulkUpdate :",
-        JSON.stringify(updateVariantsData, null, 2),
-      );
+        `;
 
-      const errors =
-        updateVariantsData.data?.productVariantsBulkUpdate?.userErrors ||
-        [];
-      if (errors.length) {
-        console.error(
-          "⚠️ Erreurs BulkUpdate :",
-          JSON.stringify(errors, null, 2),
+        const variantInput = {
+          id: variant.node.id,
+          sku: sku || null,
+          barcode: barcode || null,
+        };
+
+        console.log(`📤 Update variante ${i + 1}:`, JSON.stringify(variantInput, null, 2));
+
+        const updateVariantResp = await fetch(adminUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Shopify-Access-Token": token,
+          },
+          body: JSON.stringify({
+            query: updateVariantMutation,
+            variables: { input: variantInput },
+          }),
+        });
+
+        const updateVariantData = await updateVariantResp.json();
+        console.log(
+          `📥 Résultat update variante ${i + 1}:`,
+          JSON.stringify(updateVariantData, null, 2),
         );
-      } else {
-        console.log("✅ SKU/EAN mis à jour !");
+
+        const errors = updateVariantData.data?.productVariantUpdate?.userErrors || [];
+        if (errors.length) {
+          console.error(
+            `⚠️ Erreurs update variante ${i + 1}:`,
+            JSON.stringify(errors, null, 2),
+          );
+        } else {
+          console.log(`✅ Variante ${i + 1} mise à jour !`);
+        }
       }
     }
   } catch (err) {
@@ -240,7 +238,7 @@ if (prod.sku || prod.barcode || (prod.variants && prod.variants.length > 0)) {
 
     results.push({
       status: creationErrors.length ? "error" : "ok",
-      error: creationErrors.map((e) => e.message).join(", ") || null,
+      error: creationErrors.map((e: any) => e.message).join(", ") || null,
       shopify_id: createdProduct.id,
       upsellr_raw_id: upsellrRawId,
     });
