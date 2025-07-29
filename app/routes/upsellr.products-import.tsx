@@ -5,10 +5,63 @@ import { getShopifyAdminFromToken } from "../utils/shopify-auth";
 // Fonction pour vérifier si une image est accessible
 async function checkImageAccessibility(imageUrl: string): Promise<boolean> {
   try {
-    const response = await fetch(imageUrl, { method: 'HEAD' });
-    return response.ok;
+    const response = await fetch(imageUrl, { 
+      method: 'HEAD',
+      // Ajouter un timeout pour éviter les blocages
+      signal: AbortSignal.timeout(10000) // 10 secondes de timeout
+    });
+    
+    if (!response.ok) {
+      console.log(`❌ Image inaccessible (${response.status}): ${imageUrl}`);
+      return false;
+    }
+    
+    // Vérifier que c'est bien une image
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.startsWith('image/')) {
+      console.log(`❌ URL ne pointe pas vers une image (${contentType}): ${imageUrl}`);
+      return false;
+    }
+    
+    // Vérifier la taille du contenu si disponible
+    const contentLength = response.headers.get('content-length');
+    if (contentLength && parseInt(contentLength) === 0) {
+      console.log(`❌ Image vide (0 bytes): ${imageUrl}`);
+      return false;
+    }
+    
+    // Vérification spéciale pour les images Shopify
+    if (imageUrl.includes('cdn.shopify.com')) {
+      // Pour les images Shopify, faire une vérification plus poussée
+      try {
+        const fullResponse = await fetch(imageUrl, { 
+          method: 'GET',
+          signal: AbortSignal.timeout(15000) // 15 secondes pour le téléchargement complet
+        });
+        
+        if (!fullResponse.ok) {
+          console.log(`❌ Image Shopify inaccessible (${fullResponse.status}): ${imageUrl}`);
+          return false;
+        }
+        
+        const buffer = await fullResponse.arrayBuffer();
+        if (buffer.byteLength === 0) {
+          console.log(`❌ Image Shopify vide (0 bytes): ${imageUrl}`);
+          return false;
+        }
+        
+        console.log(`✅ Image Shopify accessible (${buffer.byteLength} bytes): ${imageUrl}`);
+        return true;
+      } catch (shopifyError) {
+        console.log(`❌ Erreur lors de la vérification complète de l'image Shopify ${imageUrl}:`, shopifyError);
+        return false;
+      }
+    }
+    
+    console.log(`✅ Image accessible (${contentType}): ${imageUrl}`);
+    return true;
   } catch (error) {
-    console.log(`❌ Image inaccessible: ${imageUrl}`);
+    console.log(`❌ Erreur lors de la vérification de l'image ${imageUrl}:`, error);
     return false;
   }
 }
@@ -410,9 +463,27 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       const mediaUserErrors = createMediaData.data?.productCreateMedia?.mediaUserErrors || [];
       if (mediaUserErrors.length > 0) {
         console.error("⚠️ Erreurs utilisateur création media:", JSON.stringify(mediaUserErrors, null, 2));
-        } else {
-          console.log("✅ Media créés avec succès");
-        }
+      }
+      
+      // Vérifier si les images ont été correctement créées
+      const createdMedia = createMediaData.data?.productCreateMedia?.media || [];
+      const failedImages = createdMedia.filter((media: any) => !media.image);
+      
+      if (failedImages.length > 0) {
+        console.error(`❌ ${failedImages.length} image(s) n'ont pas pu être traitées par Shopify:`, 
+          failedImages.map((m: any) => m.id));
+      }
+      
+      const successfulImages = createdMedia.filter((media: any) => media.image);
+      if (successfulImages.length > 0) {
+        console.log(`✅ ${successfulImages.length} image(s) créée(s) avec succès`);
+      }
+      
+      if (mediaUserErrors.length === 0 && failedImages.length === 0) {
+        console.log("✅ Tous les media ont été créés avec succès");
+      } else {
+        console.log("⚠️ Certains media n'ont pas pu être créés correctement");
+      }
       }
     }
 
