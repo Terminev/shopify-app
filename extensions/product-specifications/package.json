@@ -1,16 +1,15 @@
 {
-  "name": "product-specifications",
+  "name": "productspecifications",
+  "private": true,
   "version": "1.0.0",
-  "main": "src/ProductSpecifications.tsx",
   "license": "UNLICENSED",
   "dependencies": {
-    "@shopify/admin-api-client": "^1.0.0",
-    "@shopify/app-bridge-react": "^4.1.6",
-    "@shopify/polaris": "^12.0.0",
-    "react": "^18.2.0"
+    "react": "^18.0.0",
+    "@shopify/ui-extensions": "2025.4.x",
+    "@shopify/ui-extensions-react": "2025.4.x",
+    "react-reconciler": "0.29.0"
   },
   "devDependencies": {
-    "@types/react": "^18.2.31",
-    "typescript": "^5.2.2"
+    "@types/react": "^18.0.0"
   }
-} 
+}

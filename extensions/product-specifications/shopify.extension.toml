@@ -1,13 +1,14 @@
-name = "product-specifications"
-type = "admin_action"
+api_version = "2025-07"
 
-[settings]
-type = "react"
+[[extensions]]
+name = "Spécification Technique"
+handle = "productspecifications"
+type = "ui_extension"
 
-[capabilities]
-api_access = true
-network_access = true
+[[extensions.targeting]]
+module = "./src/BlockExtension.tsx"
+target = "admin.product-details.block.render"
 
-[extension_points]
-target = "admin.product-details.action.render"
-module = "./src/ProductSpecifications.tsx"
+[[extensions.targeting.metafields]]
+namespace = "specs"
+key = "technical"

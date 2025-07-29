@@ -1,0 +1,6 @@
+{
+  "name": "ProductSpecifications",
+  "welcome": "Welcome to the {{target}} extension!",
+  "title": "Technical Specifications",
+  "no_specs": "No technical specifications configured"
+}

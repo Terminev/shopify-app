@@ -175,6 +175,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         type: "string",
       });
     }
+
+    // Gestion des spécifications techniques
+    if (prod.specifications && Array.isArray(prod.specifications) && prod.specifications.length > 0) {
+      if (!input.metafields) input.metafields = [];
+      
+      // Transformer les spécifications en format JSON pour le metafield
+      const specsArray = prod.specifications.map((spec: any) => ({
+        title: spec.name,
+        value: spec.content
+      }));
+      
+      input.metafields.push({
+        namespace: "specs",
+        key: "technical",
+        value: JSON.stringify(specsArray),
+        type: "json",
+      });
+      
+      console.log(`📋 Spécifications techniques ajoutées (${specsArray.length} items):`, specsArray);
+    }
     if (prod.id) input.id = prod.id;
 
     let mutation: string;
