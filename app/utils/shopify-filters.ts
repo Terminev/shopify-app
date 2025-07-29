@@ -78,6 +78,14 @@ export async function getAllProductsWithPagination(adminUrl: string, token: stri
                 vendor
                 productType
                 tags
+                metafields(first: 250) {
+                  edges {
+                    node {
+                      key
+                      value
+                    }
+                  }
+                }
                 variants(first: 250) {
                   edges {
                     node {
