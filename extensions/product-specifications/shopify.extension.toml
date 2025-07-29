@@ -1,0 +1,13 @@
+name = "product-specifications"
+type = "admin_link"
+
+[settings]
+type = "react"
+
+[capabilities]
+api_access = true
+network_access = true
+
+[extension_points]
+target = "admin.product-details.action.render"
+module = "./src/ProductSpecifications.tsx"
