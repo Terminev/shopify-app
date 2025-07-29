@@ -4,57 +4,97 @@ import {
   Text,
   Divider
 } from "@shopify/ui-extensions-react/admin";
+import { useState, useEffect } from "react";
 
 export default reactExtension("admin.product-details.block.render", (api: any) => {
+  const [specsArray, setSpecsArray] = useState<{ title: string; value: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+  
   console.log("🔍 API complet:", api);
   
-  // Récupérer l'ID du produit
-  const productId = api?.data?.[0]?.id;
+  const productId = api?.data?.selected?.[0]?.id;
   console.log("🔍 Product ID:", productId);
   
-  // Appeler notre API pour récupérer les spécifications
-  if (productId) {
-    // Extraire l'ID numérique du GID
-    const numericId = productId.split('/').pop();
-    console.log("🔍 Numeric ID:", numericId);
-    
-    // Appeler notre API
-    fetch(`/api/specifications/${numericId}`)
-      .then(response => response.json())
-      .then(data => {
-        console.log("🔍 API response:", data);
-        
-        if (data.success && data.specifications) {
-          console.log("✅ Specifications found:", data.specifications);
-          
-          // Mettre à jour l'affichage
-          return (
-            <BlockStack>
-              <Text fontWeight="bold">Spécifications techniques</Text>
-              <Divider />
-              {data.specifications.map((spec: any, i: number) => (
-                <Text key={i}>
-                  {spec.title}: {spec.value}
-                </Text>
-              ))}
-            </BlockStack>
-          );
-        } else {
-          console.log("❌ No specifications found");
+  useEffect(() => {
+    if (!productId) {
+      setLoading(false);
+      return;
+    }
+
+    // Utiliser l'API GraphQL directe avec l'URL spéciale
+    const query = `
+      query getProductMetafield($id: ID!) {
+        product(id: $id) {
+          metafield(namespace: "specs", key: "technical") {
+            value
+          }
         }
-      })
-      .catch(error => {
-        console.error("❌ API error:", error);
-      });
+      }
+    `;
+
+    // Utiliser fetch avec l'URL spéciale shopify:admin/api/graphql.json
+    fetch('shopify:admin/api/graphql.json', {
+      method: 'POST',
+      body: JSON.stringify({
+        query,
+        variables: { id: productId }
+      }),
+    })
+    .then(response => response.json())
+    .then(result => {
+      console.log("🔍 GraphQL result:", result);
+      
+      const metafieldValue = result?.data?.product?.metafield?.value;
+      console.log("🔍 Metafield value:", metafieldValue);
+      
+      if (metafieldValue) {
+        try {
+          const parsedSpecs = JSON.parse(metafieldValue);
+          console.log("✅ Parsed specs:", parsedSpecs);
+          setSpecsArray(parsedSpecs);
+        } catch (error) {
+          console.error("❌ Error parsing:", error);
+          setSpecsArray([]);
+        }
+      } else {
+        setSpecsArray([]);
+      }
+      setLoading(false);
+    })
+    .catch(error => {
+      console.error("❌ GraphQL error:", error);
+      setSpecsArray([]);
+      setLoading(false);
+    });
+  }, [productId]);
+
+  if (!productId) {
+    return (
+      <BlockStack>
+        <Text fontWeight="bold">Spécifications techniques</Text>
+        <Divider />
+        <Text>Produit introuvable</Text>
+      </BlockStack>
+    );
   }
 
   return (
     <BlockStack>
       <Text fontWeight="bold">Spécifications techniques</Text>
       <Divider />
-      <Text>
-        Aucune spécification technique configurée
-      </Text>
+      {loading ? (
+        <Text>Chargement...</Text>
+      ) : specsArray.length > 0 ? (
+        specsArray.map((spec, i) => (
+          <Text key={i}>
+            {spec.title}: {spec.value}
+          </Text>
+        ))
+      ) : (
+        <Text>
+          Aucune spécification technique configurée
+        </Text>
+      )}
     </BlockStack>
   );
 });
