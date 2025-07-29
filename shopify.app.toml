@@ -3,7 +3,7 @@
 client_id = "2022322134db5403bdd40384bf020a5c"
 name = "upsellr-connector"
 handle = "upsellr-connector-1"
-application_url = "https://engineers-trademark-astrology-mechanical.trycloudflare.com"
+application_url = "https://shopify.alexandrechauvin.fr"
 embedded = true
 
 [build]
@@ -26,7 +26,7 @@ api_version = "2025-07"
 scopes = "write_products"
 
 [auth]
-redirect_urls = ["https://engineers-trademark-astrology-mechanical.trycloudflare.com/auth/callback", "https://engineers-trademark-astrology-mechanical.trycloudflare.com/auth/shopify/callback", "https://engineers-trademark-astrology-mechanical.trycloudflare.com/api/auth/callback"]
+redirect_urls = ["https://shopify.alexandrechauvin.fr/auth/callback", "https://shopify.alexandrechauvin.fr/auth/shopify/callback", "https://shopify.alexandrechauvin.fr/api/auth/callback"]
 
 [pos]
 embedded = false
