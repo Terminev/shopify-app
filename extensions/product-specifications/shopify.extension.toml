@@ -1,5 +1,5 @@
 name = "product-specifications"
-type = "admin_link"
+type = "admin_action"
 
 [settings]
 type = "react"
