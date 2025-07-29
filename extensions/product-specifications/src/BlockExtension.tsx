@@ -5,37 +5,56 @@ import {
   Divider
 } from "@shopify/ui-extensions-react/admin";
 
-export default reactExtension("admin.product-details.block.render", (extensionApi: any) => {
-  // Accéder aux metafields via l'API de l'extension
-  const metafields = extensionApi?.data?.metafields || [];
-  const technicalSpecs = metafields.find(
-    (mf: any) => mf.namespace === "specs" && mf.key === "technical"
-  );
-
-  let specsArray: { title: string; value: string }[] = [];
-  if (technicalSpecs?.value) {
-    try {
-      specsArray = JSON.parse(technicalSpecs.value);
-    } catch {
-      specsArray = [];
-    }
+export default reactExtension("admin.product-details.block.render", (api: any) => {
+  console.log("🔍 API complet:", api);
+  
+  // Récupérer l'ID du produit
+  const productId = api?.data?.[0]?.id;
+  console.log("🔍 Product ID:", productId);
+  
+  // Appeler notre API pour récupérer les spécifications
+  if (productId) {
+    // Extraire l'ID numérique du GID
+    const numericId = productId.split('/').pop();
+    console.log("🔍 Numeric ID:", numericId);
+    
+    // Appeler notre API
+    fetch(`/api/specifications/${numericId}`)
+      .then(response => response.json())
+      .then(data => {
+        console.log("🔍 API response:", data);
+        
+        if (data.success && data.specifications) {
+          console.log("✅ Specifications found:", data.specifications);
+          
+          // Mettre à jour l'affichage
+          return (
+            <BlockStack>
+              <Text fontWeight="bold">Spécifications techniques</Text>
+              <Divider />
+              {data.specifications.map((spec: any, i: number) => (
+                <Text key={i}>
+                  {spec.title}: {spec.value}
+                </Text>
+              ))}
+            </BlockStack>
+          );
+        } else {
+          console.log("❌ No specifications found");
+        }
+      })
+      .catch(error => {
+        console.error("❌ API error:", error);
+      });
   }
 
   return (
     <BlockStack>
       <Text fontWeight="bold">Spécifications techniques</Text>
       <Divider />
-      {specsArray.length > 0 ? (
-        specsArray.map((spec, i) => (
-          <Text key={i}>
-            {spec.title}: {spec.value}
-          </Text>
-        ))
-      ) : (
-        <Text>
-          Aucune spécification technique configurée
-        </Text>
-      )}
+      <Text>
+        Aucune spécification technique configurée
+      </Text>
     </BlockStack>
   );
 });

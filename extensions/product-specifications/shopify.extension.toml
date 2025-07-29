@@ -1,7 +1,7 @@
 api_version = "2025-07"
 
 [[extensions]]
-name = "Spécification Technique"
+name = "Spécifications Techniques"
 handle = "productspecifications"
 type = "ui_extension"
 
@@ -9,6 +9,15 @@ type = "ui_extension"
 module = "./src/BlockExtension.tsx"
 target = "admin.product-details.block.render"
 
-[[extensions.targeting.metafields]]
+[extensions.targeting.capabilities]
+api_access = true
+network_access = true
+
+[[extensions.metafields]]
 namespace = "specs"
 key = "technical"
+
+[[extensions.metafields_permissions]]
+namespace = "specs"
+key = "technical"
+access = "read"

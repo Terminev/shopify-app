@@ -1,5 +1,6 @@
 import { json } from "@remix-run/node";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
+import { getShopifyAdminFromToken } from "../utils/shopify-auth";
 
 // Interface pour les spécifications
 interface Specification {
@@ -12,45 +13,76 @@ interface Specification {
 
 // GET - Récupérer les spécifications d'un produit
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
+  const shopifyAuth = await getShopifyAdminFromToken(request);
+  if (shopifyAuth.error) {
+    return json({ success: false, error: shopifyAuth.error.message }, { status: shopifyAuth.error.status });
+  }
+  const { token, adminUrl } = shopifyAuth;
+
   const productId = params.productId;
-  
   if (!productId) {
-    return json({ error: "Product ID requis" }, { status: 400 });
+    return json({ success: false, error: "Product ID manquant" }, { status: 400 });
   }
 
-  try {
-    // TODO: Remplacer par votre vraie API SaaS
-    // Pour l'instant, retournons des données de test
-    const mockSpecifications: Specification[] = [
-      {
-        id: "1",
-        name: "Matériau",
-        value: "Aluminium",
-        category: "Matériaux"
-      },
-      {
-        id: "2", 
-        name: "Poids",
-        value: "2.5",
-        unit: "kg",
-        category: "Dimensions"
-      },
-      {
-        id: "3",
-        name: "Puissance",
-        value: "1000",
-        unit: "W",
-        category: "Performance"
+  // Requête GraphQL pour récupérer les metafields du produit
+  const query = `
+    query getProductMetafields($id: ID!) {
+      product(id: $id) {
+        metafields(first: 50) {
+          edges {
+            node {
+              namespace
+              key
+              value
+            }
+          }
+        }
       }
-    ];
+    }
+  `;
 
-    return json({ 
-      specifications: mockSpecifications,
-      productId 
+  try {
+    const response = await fetch(adminUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": token,
+      },
+      body: JSON.stringify({
+        query,
+        variables: { id: productId }
+      }),
     });
+
+    const data = await response.json();
+    
+    if (data.errors) {
+      console.error("❌ GraphQL errors:", data.errors);
+      return json({ success: false, error: "Erreur GraphQL" }, { status: 500 });
+    }
+
+    const metafields = data.data?.product?.metafields?.edges || [];
+    const technicalSpecs = metafields.find(
+      (edge: any) => edge.node.namespace === "specs" && edge.node.key === "technical"
+    );
+
+    let specsArray: { title: string; value: string }[] = [];
+    if (technicalSpecs?.node?.value) {
+      try {
+        specsArray = JSON.parse(technicalSpecs.node.value);
+      } catch (error) {
+        console.error("❌ Error parsing specs:", error);
+      }
+    }
+
+    return json({
+      success: true,
+      specifications: specsArray
+    });
+
   } catch (error) {
-    console.error("Erreur lors de la récupération des spécifications:", error);
-    return json({ error: "Erreur serveur" }, { status: 500 });
+    console.error("❌ Error fetching metafields:", error);
+    return json({ success: false, error: "Erreur serveur" }, { status: 500 });
   }
 };
 
