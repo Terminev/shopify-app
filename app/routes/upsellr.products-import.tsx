@@ -2,6 +2,54 @@ import { json } from "@remix-run/node";
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { getShopifyAdminFromToken } from "../utils/shopify-auth";
 
+// Fonction pour vérifier si une image est accessible
+async function checkImageAccessibility(imageUrl: string): Promise<boolean> {
+  try {
+    const response = await fetch(imageUrl, { method: 'HEAD' });
+    return response.ok;
+  } catch (error) {
+    console.log(`❌ Image inaccessible: ${imageUrl}`);
+    return false;
+  }
+}
+
+// Fonction pour filtrer les images accessibles
+async function filterAccessibleImages(images: string[]): Promise<string[]> {
+  console.log(`🔍 Vérification de l'accessibilité de ${images.length} images...`);
+  
+  const accessibleImages: string[] = [];
+  const inaccessibleImages: string[] = [];
+  
+  // Vérifier chaque image en parallèle pour plus de performance
+  const imageChecks = await Promise.allSettled(
+    images.map(async (imageUrl) => {
+      const isAccessible = await checkImageAccessibility(imageUrl);
+      return { imageUrl, isAccessible };
+    })
+  );
+  
+  for (const result of imageChecks) {
+    if (result.status === 'fulfilled') {
+      const { imageUrl, isAccessible } = result.value;
+      if (isAccessible) {
+        accessibleImages.push(imageUrl);
+      } else {
+        inaccessibleImages.push(imageUrl);
+      }
+    } else {
+      // En cas d'erreur, considérer l'image comme inaccessible
+      console.log(`❌ Erreur lors de la vérification d'une image`);
+    }
+  }
+  
+  if (inaccessibleImages.length > 0) {
+    console.log(`⚠️ ${inaccessibleImages.length} image(s) inaccessible(s) filtrée(s):`, inaccessibleImages);
+  }
+  
+  console.log(`✅ ${accessibleImages.length} image(s) accessible(s) conservée(s)`);
+  return accessibleImages;
+}
+
 export const action = async ({ request }: ActionFunctionArgs) => {
   console.log("==> /upsellr/products-import called");
 
@@ -299,36 +347,44 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     // Étape 2 : Ajout des images séparément
     if (createdProduct && prod.images?.length) {
-      console.log(`🖼️ Ajout de ${prod.images.length} nouvelles images`);
-      console.log("📋 Images à ajouter:", prod.images);
+      console.log(`🖼️ Vérification et ajout de ${prod.images.length} images`);
+      console.log("📋 Images à vérifier:", prod.images);
       
-      const imageMutation = `
-        mutation productCreateMedia($productId: ID!, $media: [CreateMediaInput!]!) {
-          productCreateMedia(productId: $productId, media: $media) {
-            media {
-              ... on MediaImage {
-                id
-                image {
+      // Filtrer les images accessibles
+      const accessibleImages = await filterAccessibleImages(prod.images);
+      
+      if (accessibleImages.length === 0) {
+        console.log("⚠️ Aucune image accessible trouvée - passage à l'étape suivante");
+      } else {
+        console.log(`✅ ${accessibleImages.length} image(s) accessible(s) à ajouter`);
+        
+        const imageMutation = `
+          mutation productCreateMedia($productId: ID!, $media: [CreateMediaInput!]!) {
+            productCreateMedia(productId: $productId, media: $media) {
+              media {
+                ... on MediaImage {
                   id
-                  originalSrc
+                  image {
+                    id
+                    originalSrc
+                  }
                 }
               }
-            }
-            mediaUserErrors {
-              field
-              message
+              mediaUserErrors {
+                field
+                message
+              }
             }
           }
-        }
-      `;
+        `;
 
-      const imageVariables = {
-        productId: createdProduct.id,
-        media: prod.images.map((src: string) => ({
-          originalSource: src,
-          mediaContentType: "IMAGE",
-        })),
-      };
+        const imageVariables = {
+          productId: createdProduct.id,
+          media: accessibleImages.map((src: string) => ({
+            originalSource: src,
+            mediaContentType: "IMAGE",
+          })),
+        };
       
       console.log("📤 Variables création media:", JSON.stringify(imageVariables, null, 2));
 
@@ -354,11 +410,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       const mediaUserErrors = createMediaData.data?.productCreateMedia?.mediaUserErrors || [];
       if (mediaUserErrors.length > 0) {
         console.error("⚠️ Erreurs utilisateur création media:", JSON.stringify(mediaUserErrors, null, 2));
-      } else {
-        console.log("✅ Media créés avec succès");
+        } else {
+          console.log("✅ Media créés avec succès");
+        }
       }
-    } else {
-      console.log("ℹ️ Aucune image à ajouter");
     }
 
     // Ajout aux collections
