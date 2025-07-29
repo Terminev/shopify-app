@@ -332,9 +332,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     /* --- MAJ des images --- */
 
-    // Suppression des images existantes si update
+    // Récupérer les images existantes si c'est un update
+    let existingMedia: any[] = [];
     if (prod.id && createdProduct) {
-      console.log("🖼️ Début traitement images - Suppression images existantes");
+      console.log("🖼️ Début traitement images - Récupération des images existantes");
       
       // 1. Récupérer les media (images) existants du produit
       const getMediaQuery = `
@@ -345,6 +346,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 node {
                   ... on MediaImage {
                     id
+                    image {
+                      originalSrc
+                    }
                   }
                 }
               }
@@ -368,12 +372,33 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       console.log("📥 Media existants:", JSON.stringify(getMediaData, null, 2));
       
       const mediaEdges = getMediaData.data?.product?.media?.edges || [];
-      const mediaIds = mediaEdges
-        .map((edge: any) => edge.node?.id)
+      existingMedia = mediaEdges
+        .map((edge: any) => ({
+          id: edge.node?.id,
+          originalSrc: edge.node?.image?.originalSrc
+        }))
         .filter(Boolean);
-      console.log(`🗑️ Suppression de ${mediaIds.length} media existants:`, mediaIds);
       
-      if (mediaIds.length > 0) {
+      console.log(`📋 ${existingMedia.length} media existants trouvés:`, existingMedia);
+    }
+
+    // Suppression sélective des images existantes si update
+    if (prod.id && createdProduct && existingMedia.length > 0) {
+      console.log("🖼️ Suppression sélective des images existantes");
+      
+      // 2. Identifier les images à supprimer (celles qui ne sont plus dans la nouvelle liste)
+      const imagesToKeep = prod.images || [];
+      const imagesToDelete = existingMedia.filter((media: any) => {
+        // Garder l'image si elle est dans la nouvelle liste
+        return !imagesToKeep.includes(media.originalSrc);
+      });
+      
+      console.log(`🗑️ ${imagesToDelete.length} image(s) à supprimer (plus dans la liste d'export):`, 
+        imagesToDelete.map((m: any) => m.originalSrc));
+      console.log(`✅ ${existingMedia.length - imagesToDelete.length} image(s) conservée(s)`);
+      
+      // 3. Supprimer seulement les images qui ne sont plus nécessaires
+      if (imagesToDelete.length > 0) {
         const deleteMediaMutation = `
           mutation productDeleteMedia($productId: ID!, $mediaIds: [ID!]!) {
             productDeleteMedia(productId: $productId, mediaIds: $mediaIds) {
@@ -390,11 +415,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           },
           body: JSON.stringify({
             query: deleteMediaMutation,
-            variables: { productId: createdProduct.id, mediaIds },
+            variables: { 
+              productId: createdProduct.id, 
+              mediaIds: imagesToDelete.map((m: any) => m.id)
+            },
           }),
         });
         const deleteMediaData = await deleteMediaResp.json();
         console.log("🗑️ Résultat suppression media:", JSON.stringify(deleteMediaData, null, 2));
+      } else {
+        console.log("ℹ️ Aucune image à supprimer");
       }
     }
 
@@ -411,80 +441,101 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       } else {
         console.log(`✅ ${accessibleImages.length} image(s) accessible(s) à ajouter`);
         
-        const imageMutation = `
-          mutation productCreateMedia($productId: ID!, $media: [CreateMediaInput!]!) {
-            productCreateMedia(productId: $productId, media: $media) {
-              media {
-                ... on MediaImage {
-                  id
-                  image {
+        // Si c'est un update, filtrer les images qui existent déjà
+        let imagesToAdd = accessibleImages;
+        if (prod.id) {
+          // Récupérer les URLs des images existantes
+          const existingImageUrls = existingMedia?.map((m: any) => m.originalSrc) || [];
+          
+          // Filtrer les images qui n'existent pas déjà
+          imagesToAdd = accessibleImages.filter((imageUrl: string) => 
+            !existingImageUrls.includes(imageUrl)
+          );
+          
+          console.log(`📋 ${accessibleImages.length - imagesToAdd.length} image(s) déjà existante(s) - ignorée(s)`);
+          console.log(`📤 ${imagesToAdd.length} nouvelle(s) image(s) à ajouter`);
+        }
+        
+        if (imagesToAdd.length > 0) {
+          const imageMutation = `
+            mutation productCreateMedia($productId: ID!, $media: [CreateMediaInput!]!) {
+              productCreateMedia(productId: $productId, media: $media) {
+                media {
+                  ... on MediaImage {
                     id
-                    originalSrc
+                    image {
+                      id
+                      originalSrc
+                    }
                   }
                 }
-              }
-              mediaUserErrors {
-                field
-                message
+                mediaUserErrors {
+                  field
+                  message
+                }
               }
             }
-          }
-        `;
+          `;
 
-        const imageVariables = {
-          productId: createdProduct.id,
-          media: accessibleImages.map((src: string) => ({
-            originalSource: src,
-            mediaContentType: "IMAGE",
-          })),
-        };
-      
-      console.log("📤 Variables création media:", JSON.stringify(imageVariables, null, 2));
+          const imageVariables = {
+            productId: createdProduct.id,
+            media: imagesToAdd.map((src: string) => ({
+              originalSource: src,
+              mediaContentType: "IMAGE",
+            })),
+          };
+        
+        console.log("📤 Variables création media:", JSON.stringify(imageVariables, null, 2));
 
-      const createMediaResp = await fetch(adminUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Shopify-Access-Token": token,
-        },
-        body: JSON.stringify({
-          query: imageMutation,
-          variables: imageVariables,
-        }),
-      });
-      
-      const createMediaData = await createMediaResp.json();
-      console.log("📥 Résultat création media:", JSON.stringify(createMediaData, null, 2));
-      
-      if (createMediaData.errors) {
-        console.error("❌ Erreurs création media:", JSON.stringify(createMediaData.errors, null, 2));
+        const createMediaResp = await fetch(adminUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Shopify-Access-Token": token,
+          },
+          body: JSON.stringify({
+            query: imageMutation,
+            variables: imageVariables,
+          }),
+        });
+        
+        const createMediaData = await createMediaResp.json();
+        console.log("📥 Résultat création media:", JSON.stringify(createMediaData, null, 2));
+        
+        if (createMediaData.errors) {
+          console.error("❌ Erreurs création media:", JSON.stringify(createMediaData.errors, null, 2));
+        }
+        
+        const mediaUserErrors = createMediaData.data?.productCreateMedia?.mediaUserErrors || [];
+        if (mediaUserErrors.length > 0) {
+          console.error("⚠️ Erreurs utilisateur création media:", JSON.stringify(mediaUserErrors, null, 2));
+        }
+        
+        // Vérifier si les images ont été correctement créées
+        const createdMedia = createMediaData.data?.productCreateMedia?.media || [];
+        const failedImages = createdMedia.filter((media: any) => !media.image);
+        
+        if (failedImages.length > 0) {
+          console.error(`❌ ${failedImages.length} image(s) n'ont pas pu être traitées par Shopify:`, 
+            failedImages.map((m: any) => m.id));
+        }
+        
+        const successfulImages = createdMedia.filter((media: any) => media.image);
+        if (successfulImages.length > 0) {
+          console.log(`✅ ${successfulImages.length} image(s) créée(s) avec succès`);
+        }
+        
+        if (mediaUserErrors.length === 0 && failedImages.length === 0) {
+          console.log("✅ Tous les media ont été créés avec succès");
+        } else {
+          console.log("⚠️ Certains media n'ont pas pu être créés correctement");
+        }
+        } else {
+          console.log("ℹ️ Aucune nouvelle image à ajouter");
+        }
       }
-      
-      const mediaUserErrors = createMediaData.data?.productCreateMedia?.mediaUserErrors || [];
-      if (mediaUserErrors.length > 0) {
-        console.error("⚠️ Erreurs utilisateur création media:", JSON.stringify(mediaUserErrors, null, 2));
-      }
-      
-      // Vérifier si les images ont été correctement créées
-      const createdMedia = createMediaData.data?.productCreateMedia?.media || [];
-      const failedImages = createdMedia.filter((media: any) => !media.image);
-      
-      if (failedImages.length > 0) {
-        console.error(`❌ ${failedImages.length} image(s) n'ont pas pu être traitées par Shopify:`, 
-          failedImages.map((m: any) => m.id));
-      }
-      
-      const successfulImages = createdMedia.filter((media: any) => media.image);
-      if (successfulImages.length > 0) {
-        console.log(`✅ ${successfulImages.length} image(s) créée(s) avec succès`);
-      }
-      
-      if (mediaUserErrors.length === 0 && failedImages.length === 0) {
-        console.log("✅ Tous les media ont été créés avec succès");
-      } else {
-        console.log("⚠️ Certains media n'ont pas pu être créés correctement");
-      }
-      }
+    } else {
+      console.log("ℹ️ Aucune image à ajouter");
     }
 
     // Ajout aux collections
