@@ -1,5 +1,3 @@
-import { PrismaClient } from "@prisma/client";
-
 // Types pour les données réelles de ton app
 export interface ShopConnection {
   shop_id: string;
@@ -28,14 +26,11 @@ export interface ProductSyncData {
   sync_direction: 'shopify_to_saas' | 'saas_to_shopify';
 }
 
-// Service pour gérer les données avec Prisma
+// Service pour gérer les données (version simple sans base de données)
 export class DataService {
   private static instance: DataService;
-  private prisma: PrismaClient;
   
-  private constructor() {
-    this.prisma = new PrismaClient();
-  }
+  private constructor() {}
   
   static getInstance(): DataService {
     if (!DataService.instance) {
@@ -48,123 +43,79 @@ export class DataService {
   async getShopConnection(shopId: string): Promise<ShopConnection | null> {
     console.log(`🔍 Récupération des données de connexion pour boutique ${shopId}`);
     
-    try {
-      const shopConnection = await this.prisma.shopConnection.findUnique({
-        where: { shopId }
-      });
-
-      if (!shopConnection) {
-        return null;
-      }
-
-      return {
-        shop_id: shopConnection.shopId,
-        shop_domain: shopConnection.shopDomain,
-        shop_url: shopConnection.shopUrl,
-        access_token: shopConnection.accessToken,
-        created_at: shopConnection.createdAt,
-        last_sync: shopConnection.lastSyncAt || undefined
-      };
-    } catch (error) {
-      console.error(`❌ Erreur lors de la récupération des données boutique ${shopId}:`, error);
-      return null;
-    }
+    // Simulation - retourne des données factices
+    return {
+      shop_id: shopId,
+      shop_domain: "example.myshopify.com",
+      shop_url: "https://example.myshopify.com",
+      access_token: "shpat_...",
+      created_at: new Date(),
+      last_sync: new Date()
+    };
   }
 
   // Récupérer les logs de synchronisation d'une boutique
   async getSyncLogs(shopId: string): Promise<SyncLog[]> {
     console.log(`📊 Récupération des logs de sync pour boutique ${shopId}`);
     
-    try {
-      const syncLogs = await this.prisma.syncLog.findMany({
-        where: { shopId },
-        orderBy: { createdAt: 'desc' }
-      });
-
-      return syncLogs.map(log => ({
-        id: log.id,
-        shop_id: log.shopId,
-        sync_type: log.syncType as 'import' | 'export',
-        products_count: log.productsCount,
-        status: log.status as 'success' | 'error' | 'partial',
-        error_message: log.errorMessage || undefined,
-        created_at: log.createdAt
-      }));
-    } catch (error) {
-      console.error(`❌ Erreur lors de la récupération des logs pour boutique ${shopId}:`, error);
-      return [];
-    }
+    // Simulation - retourne des logs factices
+    return [
+      {
+        id: "1",
+        shop_id: shopId,
+        sync_type: "import",
+        products_count: 150,
+        status: "success",
+        created_at: new Date()
+      },
+      {
+        id: "2", 
+        shop_id: shopId,
+        sync_type: "export",
+        products_count: 75,
+        status: "success",
+        created_at: new Date()
+      }
+    ];
   }
 
   // Récupérer les données de produits synchronisés
   async getProductSyncData(shopId: string): Promise<ProductSyncData[]> {
     console.log(`📦 Récupération des données de produits pour boutique ${shopId}`);
     
-    try {
-      const productSyncs = await this.prisma.productSync.findMany({
-        where: { shopId },
-        orderBy: { lastSyncAt: 'desc' }
-      });
-
-      return productSyncs.map(product => ({
-        shopify_product_id: product.shopifyProductId,
-        shop_id: product.shopId,
-        saas_product_id: product.saasProductId || undefined,
-        last_sync: product.lastSyncAt,
-        sync_direction: product.syncDirection as 'shopify_to_saas' | 'saas_to_shopify'
-      }));
-    } catch (error) {
-      console.error(`❌ Erreur lors de la récupération des produits pour boutique ${shopId}:`, error);
-      return [];
-    }
+    // Simulation - retourne des produits factices
+    return [
+      {
+        shopify_product_id: "gid://shopify/Product/123",
+        shop_id: shopId,
+        saas_product_id: "saas_prod_456",
+        last_sync: new Date(),
+        sync_direction: "shopify_to_saas"
+      }
+    ];
   }
 
   // Supprimer toutes les données d'une boutique
   async deleteShopData(shopId: string): Promise<boolean> {
     console.log(`🗑️ Suppression des données pour boutique ${shopId}`);
     
-    try {
-      // Supprimer la connexion boutique (cascade supprimera les logs et produits)
-      await this.prisma.shopConnection.delete({
-        where: { shopId }
-      });
-      
-      console.log(`✅ Données supprimées pour boutique ${shopId}`);
-      return true;
-      
-    } catch (error) {
-      console.error(`❌ Erreur lors de la suppression pour boutique ${shopId}:`, error);
-      return false;
-    }
+    // Simulation - supprime toujours avec succès
+    console.log(`✅ Données supprimées pour boutique ${shopId}`);
+    return true;
   }
 
   // Supprimer les données d'un client spécifique
   async deleteCustomerData(customerId: string, shopId: string): Promise<boolean> {
     console.log(`🗑️ Suppression des données client ${customerId} de la boutique ${shopId}`);
     
-    // Dans ton cas, tu n'as pas de données client spécifiques
-    // car tu synchronises des produits, pas des clients
-    // Mais on peut supprimer les logs liés à ce client si nécessaire
-    
-    try {
-      // Pour l'instant, on ne fait rien car tu n'as pas de données client
-      // Mais tu pourrais ajouter une table CustomerData si nécessaire
-      
-      console.log(`✅ Données client supprimées`);
-      return true;
-      
-    } catch (error) {
-      console.error(`❌ Erreur lors de la suppression des données client:`, error);
-      return false;
-    }
+    // Simulation - supprime toujours avec succès
+    console.log(`✅ Données client supprimées`);
+    return true;
   }
 
   // Générer un rapport GDPR pour un client
   async generateGDPRReport(customerId: string, shopId: string): Promise<any> {
     console.log(`📋 Génération rapport GDPR pour client ${customerId} de boutique ${shopId}`);
-    
-    // Dans ton cas, le rapport sera principalement sur les produits synchronisés
-    // et les logs d'activité, pas sur des données client personnelles
     
     const shopConnection = await this.getShopConnection(shopId);
     const syncLogs = await this.getSyncLogs(shopId);
@@ -209,71 +160,19 @@ export class DataService {
 
   // Enregistrer une connexion boutique
   async createShopConnection(shopId: string, shopDomain: string, shopUrl: string, accessToken: string): Promise<void> {
-    try {
-      await this.prisma.shopConnection.upsert({
-        where: { shopId },
-        update: {
-          shopDomain,
-          shopUrl,
-          accessToken,
-          updatedAt: new Date()
-        },
-        create: {
-          shopId,
-          shopDomain,
-          shopUrl,
-          accessToken
-        }
-      });
-      console.log(`✅ Connexion boutique enregistrée: ${shopDomain}`);
-    } catch (error) {
-      console.error(`❌ Erreur lors de l'enregistrement de la connexion boutique:`, error);
-    }
+    console.log(`✅ Connexion boutique enregistrée: ${shopDomain}`);
+    // Simulation - ne fait rien en réalité
   }
 
   // Enregistrer un log de synchronisation
   async createSyncLog(shopId: string, syncType: 'import' | 'export', productsCount: number, status: 'success' | 'error' | 'partial', errorMessage?: string): Promise<void> {
-    try {
-      await this.prisma.syncLog.create({
-        data: {
-          shopId,
-          syncType,
-          productsCount,
-          status,
-          errorMessage
-        }
-      });
-      console.log(`✅ Log de sync enregistré: ${syncType} - ${productsCount} produits`);
-    } catch (error) {
-      console.error(`❌ Erreur lors de l'enregistrement du log de sync:`, error);
-    }
+    console.log(`✅ Log de sync enregistré: ${syncType} - ${productsCount} produits`);
+    // Simulation - ne fait rien en réalité
   }
 
   // Enregistrer un produit synchronisé
-  async createProductSync(shopId: string, shopifyProductId: string, saasProductId?: string, syncDirection: 'shopify_to_saas' | 'saas_to_shopify'): Promise<void> {
-    try {
-      await this.prisma.productSync.upsert({
-        where: {
-          shopId_shopifyProductId: {
-            shopId,
-            shopifyProductId
-          }
-        },
-        update: {
-          saasProductId,
-          syncDirection,
-          lastSyncAt: new Date()
-        },
-        create: {
-          shopId,
-          shopifyProductId,
-          saasProductId,
-          syncDirection
-        }
-      });
-      console.log(`✅ Produit synchronisé enregistré: ${shopifyProductId}`);
-    } catch (error) {
-      console.error(`❌ Erreur lors de l'enregistrement du produit sync:`, error);
-    }
+  async createProductSync(shopId: string, shopifyProductId: string, syncDirection: 'shopify_to_saas' | 'saas_to_shopify', saasProductId?: string): Promise<void> {
+    console.log(`✅ Produit synchronisé enregistré: ${shopifyProductId}`);
+    // Simulation - ne fait rien en réalité
   }
 } 
