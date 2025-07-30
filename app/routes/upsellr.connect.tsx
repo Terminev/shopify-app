@@ -14,6 +14,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
   const { token, shopDomain } = shopifyAuth;
   return json({
+    
     success: 'ok',
     shopDomain,
     token,
