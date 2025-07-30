@@ -1,10 +1,8 @@
-import { json, type LoaderFunctionArgs } from "@remix-run/node";
+import { json, type ActionFunction } from "@remix-run/node";
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  
+export const action: ActionFunction = async ({ request }) => {
   const payload = await request.json();
   console.log("📄 GDPR Data Request:", payload);
 
-  // Aucun stockage client → 200 OK
   return json({ success: true });
 };
