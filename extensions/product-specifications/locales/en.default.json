@@ -1,6 +1,15 @@
 {
   "name": "ProductSpecifications",
+  "block_name": "Technical Specifications",
   "welcome": "Welcome to the {{target}} extension!",
   "title": "Technical Specifications",
-  "no_specs": "No technical specifications configured"
+  "no_specs": "No technical specifications configured",
+  "add": "Add",
+  "delete": "×",
+  "previous": "← Previous",
+  "next": "Next →",
+  "page": "Page {{current}} of {{total}}",
+  "loading": "Loading...",
+  "save_error": "Error during save",
+  "reset_error": "Error during reset"
 }

@@ -1,5 +1,14 @@
 {
+  "block_name": "Spécifications Techniques",
   "title": "Spécifications techniques",
-  "no_specs": "Aucune spécification technique configurée"
+  "no_specs": "Aucune spécification technique configurée",
+  "add": "Ajouter",
+  "delete": "×",
+  "previous": "← Précédent",
+  "next": "Suivant →",
+  "page": "Page {{current}} sur {{total}}",
+  "loading": "Chargement...",
+  "save_error": "Erreur lors de la sauvegarde",
+  "reset_error": "Erreur lors du reset"
 }
 

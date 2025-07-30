@@ -1,0 +1,13 @@
+{
+  "block_name": "Especificaciones Técnicas",
+  "title": "Especificaciones técnicas",
+  "no_specs": "No hay especificaciones técnicas configuradas",
+  "add": "Añadir",
+  "delete": "×",
+  "previous": "← Anterior",
+  "next": "Siguiente →",
+  "page": "Página {{current}} de {{total}}",
+  "loading": "Cargando...",
+  "save_error": "Error al guardar",
+  "reset_error": "Error al restablecer"
+} 

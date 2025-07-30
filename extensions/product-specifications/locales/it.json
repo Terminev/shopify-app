@@ -1,0 +1,13 @@
+{
+  "block_name": "Specifiche Tecniche",
+  "title": "Specifiche tecniche",
+  "no_specs": "Nessuna specifica tecnica configurata",
+  "add": "Aggiungi",
+  "delete": "×",
+  "previous": "← Precedente",
+  "next": "Successivo →",
+  "page": "Pagina {{current}} di {{total}}",
+  "loading": "Caricamento...",
+  "save_error": "Errore durante il salvataggio",
+  "reset_error": "Errore durante il reset"
+} 

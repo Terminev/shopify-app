@@ -1,7 +1,7 @@
 api_version = "2025-07"
 
 [[extensions]]
-name = "Spécifications Techniques"
+name = "t:block_name"
 handle = "productspecifications"
 type = "ui_extension"
 
