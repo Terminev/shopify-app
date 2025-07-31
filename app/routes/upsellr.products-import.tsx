@@ -289,28 +289,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         } else {
           console.log(`✅ ${variants.length} variante(s) trouvée(s)`);
 
-          // Utiliser l'API REST pour mettre à jour les variantes (plus fiable pour sku/barcode)
+          // Utiliser GraphQL Admin pour mettre à jour les variantes
           for (let i = 0; i < variants.length; i++) {
-            const variant = variants[i];
-            let sku = variant.node.sku;
-            let barcode = variant.node.barcode;
 
-            if (prod.variants && prod.variants.length > i) {
-              if (prod.variants[i].sku) sku = prod.variants[i].sku;
-              if (prod.variants[i].ean) barcode = prod.variants[i].ean; // Utiliser 'ean' du body
-            } else {
-              if (prod.sku) sku = prod.sku;
-              if (prod.ean) barcode = prod.ean; // Utiliser 'ean' du body
-            }
-
-            // Utiliser GraphQL Admin au lieu de REST pour mettre à jour les variantes
-            const updateVariantMutation = `
-              mutation productVariantUpdate($input: ProductVariantInput!) {
-                productVariantUpdate(input: $input) {
-                  productVariant {
+            // Utiliser GraphQL Admin pour mettre à jour les variantes via productUpdate
+            const updateProductMutation = `
+              mutation productUpdate($input: ProductInput!) {
+                productUpdate(input: $input) {
+                  product {
                     id
-                    sku
-                    barcode
+                    variants(first: 250) {
+                      edges {
+                        node {
+                          id
+                          sku
+                          barcode
+                        }
+                      }
+                    }
                   }
                   userErrors {
                     field
@@ -320,15 +316,81 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               }
             `;
 
-            const variantInput = {
-              id: variant.node.id, // Utiliser l'ID GraphQL complet
-              sku: sku || null,
-              barcode: barcode || null,
+            // Récupérer toutes les variantes du produit pour les mettre à jour
+            const getProductQuery = `
+              query getProduct($id: ID!) {
+                product(id: $id) {
+                  id
+                  variants(first: 250) {
+                    edges {
+                      node {
+                        id
+                        title
+                        sku
+                        barcode
+                        price
+                        compareAtPrice
+                        inventoryQuantity
+                        taxable
+                      }
+                    }
+                  }
+                }
+              }
+            `;
+
+            console.log("📡 Récupération du produit pour mise à jour des variantes");
+            const getProductResp = await fetch(adminUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-Shopify-Access-Token": token,
+              },
+              body: JSON.stringify({
+                query: getProductQuery,
+                variables: { id: createdProduct.id },
+              }),
+            });
+
+            const getProductData = await getProductResp.json();
+            const productVariants = getProductData.data?.product?.variants?.edges || [];
+
+            // Préparer les variantes mises à jour
+            const updatedVariants = productVariants.map((variantEdge: any, index: number) => {
+              const variant = variantEdge.node;
+              let updatedSku = variant.sku;
+              let updatedBarcode = variant.barcode;
+
+              // Mettre à jour seulement la variante correspondante
+              if (index === i) {
+                if (prod.variants && prod.variants.length > i) {
+                  if (prod.variants[i].sku) updatedSku = prod.variants[i].sku;
+                  if (prod.variants[i].ean) updatedBarcode = prod.variants[i].ean;
+                } else {
+                  if (prod.sku) updatedSku = prod.sku;
+                  if (prod.ean) updatedBarcode = prod.ean;
+                }
+              }
+
+              return {
+                id: variant.id,
+                sku: updatedSku,
+                barcode: updatedBarcode,
+                price: variant.price,
+                compareAtPrice: variant.compareAtPrice,
+                inventoryQuantity: variant.inventoryQuantity,
+                taxable: variant.taxable,
+              };
+            });
+
+            const productInput = {
+              id: createdProduct.id,
+              variants: updatedVariants,
             };
 
             console.log(
-              `📤 GraphQL Update variante ${i + 1}:`,
-              JSON.stringify(variantInput, null, 2),
+              `📤 GraphQL Update produit avec variantes:`,
+              JSON.stringify(productInput, null, 2),
             );
 
             const graphqlResp = await fetch(adminUrl, {
@@ -338,29 +400,29 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 "X-Shopify-Access-Token": token,
               },
               body: JSON.stringify({
-                query: updateVariantMutation,
-                variables: { input: variantInput },
+                query: updateProductMutation,
+                variables: { input: productInput },
               }),
             });
 
             const graphqlData = await graphqlResp.json();
             console.log(
-              `📥 Résultat GraphQL variante ${i + 1}:`,
+              `📥 Résultat GraphQL mise à jour variantes:`,
               JSON.stringify(graphqlData, null, 2),
             );
 
-            if (graphqlData.data?.productVariantUpdate?.productVariant) {
-              console.log(`✅ Variante ${i + 1} mise à jour via GraphQL Admin API !`);
+            if (graphqlData.data?.productUpdate?.product) {
+              console.log(`✅ Variantes mises à jour via GraphQL Admin API !`);
             } else {
-              const userErrors = graphqlData.data?.productVariantUpdate?.userErrors || [];
+              const userErrors = graphqlData.data?.productUpdate?.userErrors || [];
               if (userErrors.length > 0) {
                 console.error(
-                  `❌ Erreurs GraphQL variante ${i + 1}:`,
+                  `❌ Erreurs GraphQL mise à jour variantes:`,
                   userErrors.map((err: any) => `${err.field}: ${err.message}`).join(', ')
                 );
               } else {
                 console.error(
-                  `❌ Erreur GraphQL variante ${i + 1}:`,
+                  `❌ Erreur GraphQL mise à jour variantes:`,
                   JSON.stringify(graphqlData, null, 2),
                 );
               }
