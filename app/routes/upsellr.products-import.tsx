@@ -327,8 +327,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               // Utiliser les champs corrects pour ProductVariantsBulkInput
               inventoryItem: {
                 sku: updatedSku,
-                barcode: updatedBarcode,
               },
+              // Le barcode sera géré via une mutation séparée
             };
 
             console.log(
@@ -359,6 +359,53 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
             if (graphqlData.data?.productVariantsBulkUpdate?.productVariants) {
               console.log(`✅ Variante ${i + 1} mise à jour via GraphQL Admin API !`);
+              
+              // Mettre à jour le barcode via une mutation séparée si nécessaire
+              if (updatedBarcode !== variant.node.barcode) {
+                const updateBarcodeMutation = `
+                  mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+                    productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+                      productVariants {
+                        id
+                        barcode
+                      }
+                      userErrors {
+                        field
+                        message
+                      }
+                    }
+                  }
+                `;
+                
+                const barcodeInput = {
+                  id: variant.node.id,
+                  barcode: updatedBarcode,
+                };
+                
+                console.log(`📤 GraphQL Update barcode variante ${i + 1}:`, JSON.stringify(barcodeInput, null, 2));
+                
+                const barcodeResp = await fetch(adminUrl, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "X-Shopify-Access-Token": token,
+                  },
+                  body: JSON.stringify({
+                    query: updateBarcodeMutation,
+                    variables: { 
+                      productId: createdProduct.id,
+                      variants: [barcodeInput]
+                    },
+                  }),
+                });
+                
+                const barcodeData = await barcodeResp.json();
+                if (barcodeData.data?.productVariantsBulkUpdate?.productVariants) {
+                  console.log(`✅ Barcode variante ${i + 1} mis à jour via GraphQL Admin API !`);
+                } else {
+                  console.error(`❌ Erreur GraphQL barcode variante ${i + 1}:`, JSON.stringify(barcodeData, null, 2));
+                }
+              }
             } else {
               const userErrors = graphqlData.data?.productVariantsBulkUpdate?.userErrors || [];
               if (userErrors.length > 0) {
