@@ -324,8 +324,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
             const variantInput = {
               id: variant.node.id,
-              sku: updatedSku,
-              barcode: updatedBarcode,
+              // Utiliser les champs corrects pour ProductVariantsBulkInput
+              inventoryItem: {
+                sku: updatedSku,
+                barcode: updatedBarcode,
+              },
             };
 
             console.log(
