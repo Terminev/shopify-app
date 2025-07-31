@@ -303,45 +303,67 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               if (prod.ean) barcode = prod.ean; // Utiliser 'ean' du body
             }
 
-            // Extraire l'ID de la variante de l'URL GraphQL
-            const variantId = variant.node.id.split("/").pop();
-            const restUrl = `https://${shopifyAuth.shopDomain}/admin/api/2024-01/variants/${variantId}.json`;
+            // Utiliser GraphQL Admin au lieu de REST pour mettre à jour les variantes
+            const updateVariantMutation = `
+              mutation productVariantUpdate($input: ProductVariantInput!) {
+                productVariantUpdate(input: $input) {
+                  productVariant {
+                    id
+                    sku
+                    barcode
+                  }
+                  userErrors {
+                    field
+                    message
+                  }
+                }
+              }
+            `;
 
-            const variantData = {
-              variant: {
-                id: variantId,
-                sku: sku || null,
-                barcode: barcode || null, // Utiliser 'barcode' pour Shopify
-              },
+            const variantInput = {
+              id: variant.node.id, // Utiliser l'ID GraphQL complet
+              sku: sku || null,
+              barcode: barcode || null,
             };
 
             console.log(
-              `📤 REST Update variante ${i + 1}:`,
-              JSON.stringify(variantData, null, 2),
+              `📤 GraphQL Update variante ${i + 1}:`,
+              JSON.stringify(variantInput, null, 2),
             );
 
-            const restResp = await fetch(restUrl, {
-              method: "PUT",
+            const graphqlResp = await fetch(adminUrl, {
+              method: "POST",
               headers: {
                 "Content-Type": "application/json",
                 "X-Shopify-Access-Token": token,
               },
-              body: JSON.stringify(variantData),
+              body: JSON.stringify({
+                query: updateVariantMutation,
+                variables: { input: variantInput },
+              }),
             });
 
-            const restData = await restResp.json();
+            const graphqlData = await graphqlResp.json();
             console.log(
-              `📥 Résultat REST variante ${i + 1}:`,
-              JSON.stringify(restData, null, 2),
+              `📥 Résultat GraphQL variante ${i + 1}:`,
+              JSON.stringify(graphqlData, null, 2),
             );
 
-            if (restResp.ok) {
-              console.log(`✅ Variante ${i + 1} mise à jour via REST API !`);
+            if (graphqlData.data?.productVariantUpdate?.productVariant) {
+              console.log(`✅ Variante ${i + 1} mise à jour via GraphQL Admin API !`);
             } else {
-              console.error(
-                `❌ Erreur REST variante ${i + 1}:`,
-                JSON.stringify(restData, null, 2),
-              );
+              const userErrors = graphqlData.data?.productVariantUpdate?.userErrors || [];
+              if (userErrors.length > 0) {
+                console.error(
+                  `❌ Erreurs GraphQL variante ${i + 1}:`,
+                  userErrors.map((err: any) => `${err.field}: ${err.message}`).join(', ')
+                );
+              } else {
+                console.error(
+                  `❌ Erreur GraphQL variante ${i + 1}:`,
+                  JSON.stringify(graphqlData, null, 2),
+                );
+              }
             }
           }
         }
