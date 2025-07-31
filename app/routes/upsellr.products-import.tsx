@@ -291,22 +291,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
           // Utiliser GraphQL Admin pour mettre à jour les variantes
           for (let i = 0; i < variants.length; i++) {
+            const variant = variants[i];
 
-            // Utiliser GraphQL Admin pour mettre à jour les variantes via productUpdate
-            const updateProductMutation = `
-              mutation productUpdate($input: ProductInput!) {
-                productUpdate(input: $input) {
-                  product {
+            // Utiliser GraphQL Admin pour mettre à jour les variantes via productVariantsBulkUpdate
+            const updateVariantsMutation = `
+              mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+                productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+                  productVariants {
                     id
-                    variants(first: 250) {
-                      edges {
-                        node {
-                          id
-                          sku
-                          barcode
-                        }
-                      }
-                    }
+                    sku
+                    barcode
                   }
                   userErrors {
                     field
@@ -316,81 +310,27 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               }
             `;
 
-            // Récupérer toutes les variantes du produit pour les mettre à jour
-            const getProductQuery = `
-              query getProduct($id: ID!) {
-                product(id: $id) {
-                  id
-                  variants(first: 250) {
-                    edges {
-                      node {
-                        id
-                        title
-                        sku
-                        barcode
-                        price
-                        compareAtPrice
-                        inventoryQuantity
-                        taxable
-                      }
-                    }
-                  }
-                }
-              }
-            `;
+            // Préparer les données de la variante à mettre à jour
+            let updatedSku = variant.node.sku;
+            let updatedBarcode = variant.node.barcode;
 
-            console.log("📡 Récupération du produit pour mise à jour des variantes");
-            const getProductResp = await fetch(adminUrl, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "X-Shopify-Access-Token": token,
-              },
-              body: JSON.stringify({
-                query: getProductQuery,
-                variables: { id: createdProduct.id },
-              }),
-            });
+            if (prod.variants && prod.variants.length > i) {
+              if (prod.variants[i].sku) updatedSku = prod.variants[i].sku;
+              if (prod.variants[i].ean) updatedBarcode = prod.variants[i].ean;
+            } else {
+              if (prod.sku) updatedSku = prod.sku;
+              if (prod.ean) updatedBarcode = prod.ean;
+            }
 
-            const getProductData = await getProductResp.json();
-            const productVariants = getProductData.data?.product?.variants?.edges || [];
-
-            // Préparer les variantes mises à jour
-            const updatedVariants = productVariants.map((variantEdge: any, index: number) => {
-              const variant = variantEdge.node;
-              let updatedSku = variant.sku;
-              let updatedBarcode = variant.barcode;
-
-              // Mettre à jour seulement la variante correspondante
-              if (index === i) {
-                if (prod.variants && prod.variants.length > i) {
-                  if (prod.variants[i].sku) updatedSku = prod.variants[i].sku;
-                  if (prod.variants[i].ean) updatedBarcode = prod.variants[i].ean;
-                } else {
-                  if (prod.sku) updatedSku = prod.sku;
-                  if (prod.ean) updatedBarcode = prod.ean;
-                }
-              }
-
-              return {
-                id: variant.id,
-                sku: updatedSku,
-                barcode: updatedBarcode,
-                price: variant.price,
-                compareAtPrice: variant.compareAtPrice,
-                inventoryQuantity: variant.inventoryQuantity,
-                taxable: variant.taxable,
-              };
-            });
-
-            const productInput = {
-              id: createdProduct.id,
-              variants: updatedVariants,
+            const variantInput = {
+              id: variant.node.id,
+              sku: updatedSku,
+              barcode: updatedBarcode,
             };
 
             console.log(
-              `📤 GraphQL Update produit avec variantes:`,
-              JSON.stringify(productInput, null, 2),
+              `📤 GraphQL Update variante ${i + 1}:`,
+              JSON.stringify(variantInput, null, 2),
             );
 
             const graphqlResp = await fetch(adminUrl, {
@@ -400,29 +340,32 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 "X-Shopify-Access-Token": token,
               },
               body: JSON.stringify({
-                query: updateProductMutation,
-                variables: { input: productInput },
+                query: updateVariantsMutation,
+                variables: { 
+                  productId: createdProduct.id,
+                  variants: [variantInput]
+                },
               }),
             });
 
             const graphqlData = await graphqlResp.json();
             console.log(
-              `📥 Résultat GraphQL mise à jour variantes:`,
+              `📥 Résultat GraphQL mise à jour variante ${i + 1}:`,
               JSON.stringify(graphqlData, null, 2),
             );
 
-            if (graphqlData.data?.productUpdate?.product) {
-              console.log(`✅ Variantes mises à jour via GraphQL Admin API !`);
+            if (graphqlData.data?.productVariantsBulkUpdate?.productVariants) {
+              console.log(`✅ Variante ${i + 1} mise à jour via GraphQL Admin API !`);
             } else {
-              const userErrors = graphqlData.data?.productUpdate?.userErrors || [];
+              const userErrors = graphqlData.data?.productVariantsBulkUpdate?.userErrors || [];
               if (userErrors.length > 0) {
                 console.error(
-                  `❌ Erreurs GraphQL mise à jour variantes:`,
+                  `❌ Erreurs GraphQL variante ${i + 1}:`,
                   userErrors.map((err: any) => `${err.field}: ${err.message}`).join(', ')
                 );
               } else {
                 console.error(
-                  `❌ Erreur GraphQL mise à jour variantes:`,
+                  `❌ Erreur GraphQL variante ${i + 1}:`,
                   JSON.stringify(graphqlData, null, 2),
                 );
               }
