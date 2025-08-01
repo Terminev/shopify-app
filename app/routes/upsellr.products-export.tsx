@@ -26,7 +26,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const paginatedProducts = products.slice((page - 1) * pageSize, page * pageSize);
 
   // Transformer les produits pour ne garder que les champs essentiels
-  const simplifiedProducts = paginatedProducts.map((product: any) => {
+  const simplifiedProducts = await Promise.all(paginatedProducts.map(async (product: any) => {
     // Extraire les métadonnées essentielles
     const metafields = product.metafields?.edges?.map((edge: any) => edge.node) || [];
     const shortDescription = metafields.find((m: any) => m.key === 'short_description' && m.namespace === 'custom')?.value;
@@ -36,13 +36,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const variants = product.variants?.edges?.map((edge: any) => edge.node) || [];
     const firstVariant = variants[0] || {};
     
-    // Extraire les meta taxonomies de catégorie (champs automatiques)
-    const categoryMetaFields = metafields.filter((m: any) => 
-      m.namespace === 'shopify' && 
-      (m.key.includes('color') || m.key.includes('format') || m.key.includes('resolution') || 
-       m.key.includes('connection') || m.key.includes('system') || m.key.includes('power') ||
-       m.key.includes('efficiency') || m.key.includes('compatible'))
-    );
+    // Récupérer toutes les meta taxonomies résolues
+    const allMetaTaxonomies = await getProductMetaTaxonomies(product, adminUrl, token);
+    
+    // Filtrer seulement les champs de catégorie (namespace 'shopify')
+    const categoryMetaFields = Object.entries(allMetaTaxonomies)
+      .filter(([key, value]: [string, any]) => 
+        value.namespace === 'shopify' && 
+        (key.includes('color') || key.includes('format') || key.includes('resolution') || 
+         key.includes('connection') || key.includes('system') || key.includes('power') ||
+         key.includes('efficiency') || key.includes('compatible'))
+      )
+      .map(([key, value]: [string, any]) => ({
+        key: value.key,
+        value: value.value,
+        type: value.type,
+        namespace: value.namespace
+      }));
 
     const simplifiedProduct: any = {
       id: product.id,
@@ -59,22 +69,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         id: product.category?.id,
         name: product.category?.name
       },
-      // Meta taxonomies de catégorie (champs automatiques)
-      category_meta_fields: categoryMetaFields.map((m: any) => ({
-        key: m.key,
-        value: m.value,
-        type: m.type,
-        namespace: m.namespace
-      }))
+      // Meta taxonomies de catégorie (champs automatiques) avec valeurs résolues
+      category_meta_fields: categoryMetaFields
     };
 
-    // Ajouter les meta taxonomies résolues si demandé
+    // Ajouter les meta taxonomies complètes si demandé
     if (!excludeMetaTaxonomies) {
-      simplifiedProduct.meta_taxonomies = getProductMetaTaxonomies(product, adminUrl, token);
+      simplifiedProduct.meta_taxonomies = allMetaTaxonomies;
     }
 
     return simplifiedProduct;
-  });
+  }));
 
   return json({
     stats: {
