@@ -27,8 +27,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   // Ajouter les meta taxonomies par défaut (sauf si explicitement exclu)
   if (!excludeMetaTaxonomies) {
+    const skipMetaobjectResolution = params.get('skip_metaobject_resolution') === 'true';
+    
     for (const product of paginatedProducts) {
-      product.meta_taxonomies = await getProductMetaTaxonomies(product, adminUrl, token);
+      product.meta_taxonomies = await getProductMetaTaxonomies(product, adminUrl, token, skipMetaobjectResolution);
     }
   }
 

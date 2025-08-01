@@ -21,24 +21,12 @@ api_version = "2025-07"
   topics = [ "app/scopes_update" ]
   uri = "/webhooks/app/scopes_update"
 
-  [[webhooks.subscriptions]]
-  topics = [ "customers/data_request" ]
-  uri = "/webhooks/customers/data_request"
-
-  [[webhooks.subscriptions]]
-  topics = [ "customers/redact" ]
-  uri = "/webhooks/customers/redact"
-
-  [[webhooks.subscriptions]]
-  topics = [ "shop/redact" ]
-  uri = "/webhooks/shop/redact"
-
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 scopes = "write_products,read_metaobjects"
 
 [auth]
-redirect_urls = ["https://shopify.alexandrechauvin.fr/auth/callback", "https://shopify.alexandrechauvin.fr/auth/shopify/callback", "https://shopify.alexandrechauvin.fr/api/auth/callback"]
+redirect_urls = ["https://app.alexandrechauvin.fr/auth/callback", "https://app.alexandrechauvin.fr/auth/shopify/callback", "https://app.alexandrechauvin.fr/api/auth/callback"]
 
 [pos]
 embedded = false

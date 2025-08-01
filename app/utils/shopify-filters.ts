@@ -570,9 +570,9 @@ async function resolveMetaobjectReferences(metafield: any, adminUrl?: string, to
  * @param product Produit avec ses métadonnées
  * @param adminUrl URL de l'API admin Shopify (optionnel, pour résoudre les metaobjects)
  * @param token Token d'authentification (optionnel, pour résoudre les metaobjects)
- * @returns Objet contenant les meta taxonomies du produit
- */
-export async function getProductMetaTaxonomies(product: any, adminUrl?: string, token?: string) {
+* @returns Objet contenant les meta taxonomies du produit
+*/
+export async function getProductMetaTaxonomies(product: any, adminUrl?: string, token?: string, skipMetaobjectResolution?: boolean) {
   const metafields = product.metafields?.edges?.map((edge: any) => edge.node) || [];
   const taxonomies: { [key: string]: any } = {};
   
@@ -580,7 +580,7 @@ export async function getProductMetaTaxonomies(product: any, adminUrl?: string, 
     const key = `${metafield.namespace || 'undefined'}.${metafield.key}`;
     
     // Résoudre les références de metaobjects (async maintenant)
-    const resolvedValue = await resolveMetaobjectReferences(metafield, adminUrl, token);
+    const resolvedValue = skipMetaobjectResolution ? metafield.value : await resolveMetaobjectReferences(metafield, adminUrl, token);
     
     taxonomies[key] = {
       namespace: metafield.namespace,
