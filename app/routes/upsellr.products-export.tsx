@@ -36,6 +36,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const variants = product.variants?.edges?.map((edge: any) => edge.node) || [];
     const firstVariant = variants[0] || {};
     
+    // Extraire les images
+    const images = product.images?.edges?.map((edge: any) => edge.node) || [];
+    
     // Récupérer toutes les meta taxonomies résolues
     const allMetaTaxonomies = await getProductMetaTaxonomies(product, adminUrl, token);
     
@@ -65,6 +68,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       vendor: product.vendor,
       sku: firstVariant.sku,
       barcode: firstVariant.barcode,
+      images: images.map((img: any) => ({
+        id: img.id,
+        url: img.url,
+        alt_text: img.altText
+      })),
       category: {
         id: product.category?.id,
         name: product.category?.name
