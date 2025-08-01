@@ -424,6 +424,7 @@ async function resolveMetaobjectReferences(metafield: any, adminUrl?: string, to
   // Si pas de références dans la réponse, essayer de récupérer les metaobjects séparément
   if (!metafield.references?.edges?.length && (metafield.type === 'list.metaobject_reference' || metafield.type === 'metaobject_reference')) {
     if (!adminUrl || !token) {
+      console.log(`⚠️ Pas de contexte pour résoudre les metaobjects: ${metafield.key}`);
       return metafield.value; // Pas possible de résoudre sans contexte
     }
 
@@ -434,11 +435,14 @@ async function resolveMetaobjectReferences(metafield: any, adminUrl?: string, to
         try {
           metaobjectIds = JSON.parse(metafield.value);
         } catch (e) {
+          console.log(`❌ Erreur parsing JSON pour ${metafield.key}:`, e);
           return metafield.value;
         }
       } else {
         metaobjectIds = [metafield.value];
       }
+
+      console.log(`🔍 Tentative de résolution de ${metaobjectIds.length} metaobject(s) pour ${metafield.key}:`, metaobjectIds);
 
       // Récupérer les metaobjects un par un
       const resolvedReferences = [];
@@ -456,6 +460,8 @@ async function resolveMetaobjectReferences(metafield: any, adminUrl?: string, to
           }
         `;
 
+        console.log(`📡 Requête metaobject pour ${metaobjectId}`);
+        
         const response = await fetch(adminUrl, {
           method: 'POST',
           headers: {
@@ -469,17 +475,33 @@ async function resolveMetaobjectReferences(metafield: any, adminUrl?: string, to
         });
 
         const metaobjectData = await response.json();
+        console.log(`📥 Réponse metaobject pour ${metaobjectId}:`, JSON.stringify(metaobjectData, null, 2));
+
         if (metaobjectData.data?.metaobject) {
           const metaobject = metaobjectData.data.metaobject;
+          console.log(`✅ Metaobject trouvé:`, metaobject);
+          
           const titleField = metaobject.fields.find((field: any) => 
             field.key === 'title' || field.key === 'name' || field.key === 'label'
           );
+          
+          const label = titleField?.value || metaobject.type;
+          console.log(`🏷️ Label trouvé: "${label}" (champ: ${titleField?.key || 'type'})`);
+          
           resolvedReferences.push({
             id: metaobjectId,
-            label: titleField?.value || metaobject.type,
+            label: label,
             type: metaobject.type
           });
+        } else if (metaobjectData.errors) {
+          console.error(`❌ Erreur GraphQL pour ${metaobjectId}:`, metaobjectData.errors);
+          resolvedReferences.push({
+            id: metaobjectId,
+            label: 'Error: ' + metaobjectData.errors[0]?.message || 'Unknown',
+            type: 'error'
+          });
         } else {
+          console.log(`❓ Metaobject non trouvé pour ${metaobjectId}`);
           resolvedReferences.push({
             id: metaobjectId,
             label: 'Unknown',
@@ -490,7 +512,7 @@ async function resolveMetaobjectReferences(metafield: any, adminUrl?: string, to
 
       return metafield.type === 'list.metaobject_reference' ? resolvedReferences : resolvedReferences[0];
     } catch (error) {
-      console.error('Erreur lors de la résolution des metaobjects:', error);
+      console.error('❌ Erreur lors de la résolution des metaobjects:', error);
       return metafield.value;
     }
   }
