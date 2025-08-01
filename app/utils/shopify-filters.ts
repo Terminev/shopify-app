@@ -83,6 +83,22 @@ export async function getAllProductsWithPagination(adminUrl: string, token: stri
                     node {
                       key
                       value
+                      namespace
+                      type
+                      references(first: 10) {
+                        edges {
+                          node {
+                            ... on Metaobject {
+                              id
+                              type
+                              fields {
+                                key
+                                value
+                              }
+                            }
+                          }
+                        }
+                      }
                     }
                   }
                 }
@@ -321,7 +337,62 @@ export function getCategoryMetaSuggestions(products: any[], categoryName: string
 }
 
 /**
- * Récupère les meta taxonomies d'un produit spécifique
+ * Résout les références de metaobjects pour obtenir les labels
+ * @param metafield Metafield avec ses références
+ * @returns Valeur avec les labels résolus
+ */
+function resolveMetaobjectReferences(metafield: any): any {
+  if (!metafield.references?.edges?.length) {
+    return metafield.value;
+  }
+
+  const references = metafield.references.edges.map((edge: any) => edge.node);
+  
+  // Si c'est un tableau de références (comme dans les métadonnées JSON)
+  if (metafield.type === 'list.metaobject_reference' || metafield.type === 'json') {
+    try {
+      // Essayer de parser la valeur comme JSON
+      const valueArray = JSON.parse(metafield.value);
+      if (Array.isArray(valueArray)) {
+        return valueArray.map((refId: string) => {
+          const reference = references.find((ref: any) => ref.id === refId);
+          if (reference) {
+            // Chercher le champ 'title' ou 'name' ou le premier champ disponible
+            const titleField = reference.fields.find((field: any) => 
+              field.key === 'title' || field.key === 'name' || field.key === 'label'
+            );
+            return {
+              id: refId,
+              label: titleField?.value || reference.type,
+              type: reference.type
+            };
+          }
+          return { id: refId, label: 'Unknown', type: 'unknown' };
+        });
+      }
+    } catch (e) {
+      // Si ce n'est pas du JSON, traiter comme une référence simple
+    }
+  }
+
+  // Pour les références simples
+  if (references.length === 1) {
+    const reference = references[0];
+    const titleField = reference.fields.find((field: any) => 
+      field.key === 'title' || field.key === 'name' || field.key === 'label'
+    );
+    return {
+      id: reference.id,
+      label: titleField?.value || reference.type,
+      type: reference.type
+    };
+  }
+
+  return metafield.value;
+}
+
+/**
+ * Récupère les meta taxonomies d'un produit spécifique avec les labels résolus
  * @param product Produit avec ses métadonnées
  * @returns Objet contenant les meta taxonomies du produit
  */
@@ -330,12 +401,17 @@ export function getProductMetaTaxonomies(product: any) {
   const taxonomies: { [key: string]: any } = {};
   
   metafields.forEach((metafield: any) => {
-    const key = `${metafield.namespace}.${metafield.key}`;
+    const key = `${metafield.namespace || 'undefined'}.${metafield.key}`;
+    
+    // Résoudre les références de metaobjects
+    const resolvedValue = resolveMetaobjectReferences(metafield);
+    
     taxonomies[key] = {
       namespace: metafield.namespace,
       key: metafield.key,
-      value: metafield.value,
-      type: metafield.type
+      value: resolvedValue,
+      type: metafield.type,
+      original_value: metafield.value // Garder la valeur originale pour référence
     };
   });
   

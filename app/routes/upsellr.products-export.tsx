@@ -20,13 +20,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const params = url.searchParams;
   const page = Math.max(1, parseInt(params.get('page') || '1', 10));
   const pageSize = Math.max(1, Math.min(250, parseInt(params.get('page_size') || '250', 10)));
-  const includeMetaTaxonomies = params.get('include_meta_taxonomies') === 'true';
+  const excludeMetaTaxonomies = params.get('exclude_meta_taxonomies') === 'true';
   const totalProductsRest = products.length;
   const pageCount = Math.max(1, Math.ceil(totalProductsRest / pageSize));
   const paginatedProducts = products.slice((page - 1) * pageSize, page * pageSize);
 
-  // Ajouter les meta taxonomies si demandé
-  if (includeMetaTaxonomies) {
+  // Ajouter les meta taxonomies par défaut (sauf si explicitement exclu)
+  if (!excludeMetaTaxonomies) {
     paginatedProducts.forEach((product: any) => {
       product.meta_taxonomies = getProductMetaTaxonomies(product);
     });

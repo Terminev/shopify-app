@@ -1,6 +1,6 @@
 # API Meta Taxonomies - Documentation
 
-Cette API permet de récupérer les meta taxonomies attribuées automatiquement selon la catégorie des produits.
+Cette API permet de récupérer les meta taxonomies attribuées automatiquement selon la catégorie des produits, avec résolution automatique des labels des metaobjects.
 
 ## Endpoints disponibles
 
@@ -113,22 +113,25 @@ GET /upsellr/category-meta-suggestions?category=Consoles%20de%20jeu%20vidéo&min
 }
 ```
 
-### 3. Export des produits avec meta taxonomies
+### 3. Export des produits avec meta taxonomies (par défaut)
 
 **URL:** `/upsellr/products-export`
 
 **Paramètres:**
-- `include_meta_taxonomies` (optionnel): `true` pour inclure les meta taxonomies (défaut: `false`)
+- `exclude_meta_taxonomies` (optionnel): `true` pour exclure les meta taxonomies (défaut: `false`)
 - Tous les paramètres de filtrage et pagination existants
 
 **Exemple d'utilisation:**
 
 ```bash
-# Exporter les produits avec leurs meta taxonomies
-GET /upsellr/products-export?include_meta_taxonomies=true&page=1&page_size=50
+# Exporter les produits avec leurs meta taxonomies (par défaut)
+GET /upsellr/products-export?page=1&page_size=50
+
+# Exporter les produits sans meta taxonomies
+GET /upsellr/products-export?exclude_meta_taxonomies=true&page=1&page_size=50
 ```
 
-**Réponse avec meta taxonomies:**
+**Réponse avec meta taxonomies (incluant les labels résolus):**
 ```json
 {
   "stats": {
@@ -150,13 +153,41 @@ GET /upsellr/products-export?include_meta_taxonomies=true&page=1&page_size=50
           "namespace": "specs",
           "key": "technical",
           "value": "[{\"title\":\"Couleur\",\"value\":\"Noir\"}]",
-          "type": "json"
+          "type": "json",
+          "original_value": "[{\"title\":\"Couleur\",\"value\":\"Noir\"}]"
         },
         "custom.color": {
           "namespace": "custom",
           "key": "color",
           "value": "Noir",
-          "type": "single_line_text_field"
+          "type": "single_line_text_field",
+          "original_value": "Noir"
+        },
+        "custom.compatible-game-format": {
+          "namespace": "custom",
+          "key": "compatible-game-format",
+          "value": [
+            {
+              "id": "gid://shopify/Metaobject/199305593163",
+              "label": "Rétrocompatibilité",
+              "type": "game_format"
+            }
+          ],
+          "type": "list.metaobject_reference",
+          "original_value": "[\"gid://shopify/Metaobject/199305593163\"]"
+        },
+        "custom.color-pattern": {
+          "namespace": "custom",
+          "key": "color-pattern",
+          "value": [
+            {
+              "id": "gid://shopify/Metaobject/199305789771",
+              "label": "Noir",
+              "type": "color"
+            }
+          ],
+          "type": "list.metaobject_reference",
+          "original_value": "[\"gid://shopify/Metaobject/199305789771\"]"
         }
       }
     }
@@ -173,6 +204,13 @@ Le système détecte automatiquement les métadonnées qui semblent être des ta
 1. **Namespace spécifiques:** `specs`, `taxonomy`, `category_meta`, etc.
 2. **Clés particulières:** contenant `taxonomy`, `auto_meta`, `suggested`, `recommended`, `attributes`, `specifications`
 3. **Types de données:** JSON, listes, champs de texte structurés
+
+### Résolution automatique des labels
+
+Le système résout automatiquement les références de metaobjects pour afficher les labels au lieu des IDs :
+
+- **Références simples:** `gid://shopify/Metaobject/123` → `{ "id": "...", "label": "Nom du metaobject", "type": "..." }`
+- **Listes de références:** `["gid://shopify/Metaobject/123", "gid://shopify/Metaobject/456"]` → `[{ "id": "...", "label": "Nom 1", "type": "..." }, { "id": "...", "label": "Nom 2", "type": "..." }]`
 
 ### Suggestions intelligentes
 
