@@ -71,7 +71,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       images: images.map((img: any) => ({
         id: img.id,
         url: img.url,
-        alt_text: img.altText
       })),
       category: {
         id: product.category?.id,
