@@ -77,6 +77,30 @@ export async function getAllProductsWithPagination(adminUrl: string, token: stri
                 vendor
                 productType
                 tags
+                metafields(first: 50) {
+                  edges {
+                    node {
+                      key
+                      value
+                      namespace
+                      type
+                      references(first: 10) {
+                        edges {
+                          node {
+                            ... on Metaobject {
+                              id
+                              type
+                              fields {
+                                key
+                                value
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
                 variants(first: 50) {
                   edges {
                     node {
