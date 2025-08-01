@@ -27,9 +27,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   // Ajouter les meta taxonomies par défaut (sauf si explicitement exclu)
   if (!excludeMetaTaxonomies) {
-    paginatedProducts.forEach((product: any) => {
-      product.meta_taxonomies = getProductMetaTaxonomies(product);
-    });
+    for (const product of paginatedProducts) {
+      product.meta_taxonomies = await getProductMetaTaxonomies(product, adminUrl, token);
+    }
   }
 
   return json({

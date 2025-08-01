@@ -37,7 +37,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       return json({ success: false, error: "Produit non trouvé" }, { status: 404 });
     }
     
-    const productTaxonomies = getProductMetaTaxonomies(product);
+    const productTaxonomies = await getProductMetaTaxonomies(product, adminUrl, token);
     return json({
       success: true,
       product_id: productId,
@@ -83,7 +83,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   });
 
-  const result = {
+  const result: any = {
     success: true,
     total_products: products.length,
     categories: Object.keys(allCategoryTaxonomies).map(categoryName => ({

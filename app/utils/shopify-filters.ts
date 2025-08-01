@@ -416,53 +416,128 @@ export function getCategoryMetaSuggestions(products: any[], categoryName: string
 /**
  * Résout les références de metaobjects pour obtenir les labels
  * @param metafield Metafield avec ses références
+ * @param adminUrl URL de l'API admin Shopify
+ * @param token Token d'authentification
  * @returns Valeur avec les labels résolus
  */
-function resolveMetaobjectReferences(metafield: any): any {
-  if (!metafield.references?.edges?.length) {
-    return metafield.value;
-  }
+async function resolveMetaobjectReferences(metafield: any, adminUrl?: string, token?: string): Promise<any> {
+  // Si pas de références dans la réponse, essayer de récupérer les metaobjects séparément
+  if (!metafield.references?.edges?.length && (metafield.type === 'list.metaobject_reference' || metafield.type === 'metaobject_reference')) {
+    if (!adminUrl || !token) {
+      return metafield.value; // Pas possible de résoudre sans contexte
+    }
 
-  const references = metafield.references.edges.map((edge: any) => edge.node);
-  
-  // Si c'est un tableau de références (comme dans les métadonnées JSON)
-  if (metafield.type === 'list.metaobject_reference' || metafield.type === 'json') {
     try {
-      // Essayer de parser la valeur comme JSON
-      const valueArray = JSON.parse(metafield.value);
-      if (Array.isArray(valueArray)) {
-        return valueArray.map((refId: string) => {
-          const reference = references.find((ref: any) => ref.id === refId);
-          if (reference) {
-            // Chercher le champ 'title' ou 'name' ou le premier champ disponible
-            const titleField = reference.fields.find((field: any) => 
-              field.key === 'title' || field.key === 'name' || field.key === 'label'
-            );
-            return {
-              id: refId,
-              label: titleField?.value || reference.type,
-              type: reference.type
-            };
-          }
-          return { id: refId, label: 'Unknown', type: 'unknown' };
-        });
+      // Parser la valeur pour extraire les IDs
+      let metaobjectIds: string[] = [];
+      if (metafield.type === 'list.metaobject_reference') {
+        try {
+          metaobjectIds = JSON.parse(metafield.value);
+        } catch (e) {
+          return metafield.value;
+        }
+      } else {
+        metaobjectIds = [metafield.value];
       }
-    } catch (e) {
-      // Si ce n'est pas du JSON, traiter comme une référence simple
+
+      // Récupérer les metaobjects un par un
+      const resolvedReferences = [];
+      for (const metaobjectId of metaobjectIds) {
+        const metaobjectQuery = `
+          query getMetaobject($id: ID!) {
+            metaobject(id: $id) {
+              id
+              type
+              fields {
+                key
+                value
+              }
+            }
+          }
+        `;
+
+        const response = await fetch(adminUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Shopify-Access-Token': token,
+          },
+          body: JSON.stringify({
+            query: metaobjectQuery,
+            variables: { id: metaobjectId }
+          })
+        });
+
+        const metaobjectData = await response.json();
+        if (metaobjectData.data?.metaobject) {
+          const metaobject = metaobjectData.data.metaobject;
+          const titleField = metaobject.fields.find((field: any) => 
+            field.key === 'title' || field.key === 'name' || field.key === 'label'
+          );
+          resolvedReferences.push({
+            id: metaobjectId,
+            label: titleField?.value || metaobject.type,
+            type: metaobject.type
+          });
+        } else {
+          resolvedReferences.push({
+            id: metaobjectId,
+            label: 'Unknown',
+            type: 'unknown'
+          });
+        }
+      }
+
+      return metafield.type === 'list.metaobject_reference' ? resolvedReferences : resolvedReferences[0];
+    } catch (error) {
+      console.error('Erreur lors de la résolution des metaobjects:', error);
+      return metafield.value;
     }
   }
 
-  // Pour les références simples
-  if (references.length === 1) {
-    const reference = references[0];
-    const titleField = reference.fields.find((field: any) => 
-      field.key === 'title' || field.key === 'name' || field.key === 'label'
-    );
-    return {
-      id: reference.id,
-      label: titleField?.value || reference.type,
-      type: reference.type
-    };
+  // Si on a des références dans la réponse
+  if (metafield.references?.edges?.length) {
+    const references = metafield.references.edges.map((edge: any) => edge.node);
+    
+    // Si c'est un tableau de références (comme dans les métadonnées JSON)
+    if (metafield.type === 'list.metaobject_reference' || metafield.type === 'json') {
+      try {
+        // Essayer de parser la valeur comme JSON
+        const valueArray = JSON.parse(metafield.value);
+        if (Array.isArray(valueArray)) {
+          return valueArray.map((refId: string) => {
+            const reference = references.find((ref: any) => ref.id === refId);
+            if (reference) {
+              // Chercher le champ 'title' ou 'name' ou le premier champ disponible
+              const titleField = reference.fields.find((field: any) => 
+                field.key === 'title' || field.key === 'name' || field.key === 'label'
+              );
+              return {
+                id: refId,
+                label: titleField?.value || reference.type,
+                type: reference.type
+              };
+            }
+            return { id: refId, label: 'Unknown', type: 'unknown' };
+          });
+        }
+      } catch (e) {
+        // Si ce n'est pas du JSON, traiter comme une référence simple
+      }
+    }
+
+    // Pour les références simples
+    if (references.length === 1) {
+      const reference = references[0];
+      const titleField = reference.fields.find((field: any) => 
+        field.key === 'title' || field.key === 'name' || field.key === 'label'
+      );
+      return {
+        id: reference.id,
+        label: titleField?.value || reference.type,
+        type: reference.type
+      };
+    }
   }
 
   return metafield.value;
@@ -471,17 +546,19 @@ function resolveMetaobjectReferences(metafield: any): any {
 /**
  * Récupère les meta taxonomies d'un produit spécifique avec les labels résolus
  * @param product Produit avec ses métadonnées
+ * @param adminUrl URL de l'API admin Shopify (optionnel, pour résoudre les metaobjects)
+ * @param token Token d'authentification (optionnel, pour résoudre les metaobjects)
  * @returns Objet contenant les meta taxonomies du produit
  */
-export function getProductMetaTaxonomies(product: any) {
+export async function getProductMetaTaxonomies(product: any, adminUrl?: string, token?: string) {
   const metafields = product.metafields?.edges?.map((edge: any) => edge.node) || [];
   const taxonomies: { [key: string]: any } = {};
   
-  metafields.forEach((metafield: any) => {
+  for (const metafield of metafields) {
     const key = `${metafield.namespace || 'undefined'}.${metafield.key}`;
     
-    // Résoudre les références de metaobjects
-    const resolvedValue = resolveMetaobjectReferences(metafield);
+    // Résoudre les références de metaobjects (async maintenant)
+    const resolvedValue = await resolveMetaobjectReferences(metafield, adminUrl, token);
     
     taxonomies[key] = {
       namespace: metafield.namespace,
@@ -490,7 +567,7 @@ export function getProductMetaTaxonomies(product: any) {
       type: metafield.type,
       original_value: metafield.value // Garder la valeur originale pour référence
     };
-  });
+  }
   
   return taxonomies;
 } 
