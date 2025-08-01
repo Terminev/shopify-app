@@ -36,6 +36,42 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     label: edge.node.title,
   }));
 
+  // Récupérer les catégories des produits
+  const categoriesQuery = `
+    query getProductCategories {
+      products(first: 250) {
+        edges {
+          node {
+            category {
+              id
+              name
+            }
+          }
+        }
+      }
+    }
+  `;
+  const categoriesResp = await fetch(adminUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Shopify-Access-Token': token,
+    },
+    body: JSON.stringify({ query: categoriesQuery })
+  });
+  const categoriesData = await categoriesResp.json();
+  const allCategories = (categoriesData.data?.products?.edges || [])
+    .map((edge: any) => edge.node.category)
+    .filter(Boolean); // Filtrer les catégories null/undefined
+  const uniqueCategories = Array.from(new Set(allCategories.map((cat: any) => cat.id)));
+  const categories = uniqueCategories.map((categoryId: any) => {
+    const category = allCategories.find((cat: any) => cat.id === categoryId);
+    return {
+      value: category.id,
+      label: category.name,
+    };
+  });
+
   // Récupérer les types de produits à partir des produits
   const productTypesQuery = `
     query getProductTypesFromProducts {
@@ -98,6 +134,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return json({
     collections,
+    categories,
     product_types,
     vendors,
   });
