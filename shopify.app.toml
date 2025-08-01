@@ -3,7 +3,7 @@
 client_id = "2022322134db5403bdd40384bf020a5c"
 name = "upsellr-connector"
 handle = "upsellr-connector-1"
-application_url = "https://shopify.alexandrechauvin.fr"
+application_url = "https://app.alexandrechauvin.fr"
 embedded = true
 
 [build]
