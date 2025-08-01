@@ -271,13 +271,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // Si UPDATE échoue (produit supprimé), essayer CREATE
     if (!createdProduct?.id && prod.id && creationErrors.length > 0) {
       console.log(`⚠️ UPDATE échoué pour ${prod.id} - Tentative de CREATE à la place`);
+      console.log(`📋 Erreurs détectées:`, JSON.stringify(creationErrors, null, 2));
       
       // Vérifier si l'erreur indique que le produit n'existe pas
-      const productNotFound = creationErrors.some((error: any) => 
-        error.message?.includes("not found") || 
-        error.message?.includes("doesn't exist") ||
-        error.message?.includes("Product not found")
-      );
+      const productNotFound = creationErrors.some((error: any) => {
+        const message = error.message?.toLowerCase() || '';
+        return message.includes("not found") || 
+               message.includes("doesn't exist") ||
+               message.includes("product not found") ||
+               message.includes("could not find") ||
+               message.includes("invalid id") ||
+               message.includes("does not exist");
+      });
+      
+      console.log(`🔍 Détection erreur "produit non trouvé": ${productNotFound}`);
       
       if (productNotFound) {
         console.log(`🔄 Produit ${prod.id} supprimé côté Shopify - Création d'un nouveau produit`);
@@ -295,6 +302,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           }
         `;
         
+        console.log(`📤 Tentative CREATE avec input:`, JSON.stringify(input, null, 2));
+        
         const createResp = await fetch(adminUrl, {
           method: "POST",
           headers: {
@@ -308,6 +317,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         });
         
         const createData = await createResp.json();
+        console.log(`📥 Réponse CREATE:`, JSON.stringify(createData, null, 2));
+        
         createdProduct = createData.data?.productCreate?.product;
         creationErrors = createData.data?.productCreate?.userErrors || [];
         
@@ -316,6 +327,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         } else {
           console.error(`❌ Échec de la recréation du produit:`, creationErrors);
         }
+      } else {
+        console.log(`⚠️ Erreur UPDATE non liée à un produit supprimé - Pas de fallback CREATE`);
       }
     }
 
