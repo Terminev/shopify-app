@@ -55,6 +55,7 @@ export async function getAllProductsWithPagination(adminUrl: string, token: stri
   let hasNextPage = true;
   let cursor: string | null = null;
   let productsQuery: string;
+  let triedWithoutReferences = false;
 
   while (hasNextPage) {
     if (allProductFields) {
@@ -179,11 +180,96 @@ export async function getAllProductsWithPagination(adminUrl: string, token: stri
         variables: { first: 250, after: cursor, query: shopifyQuery || undefined }
       })
     });
-    if (!response.ok) {
-      throw new Error(`Shopify API error: ${response.status}`);
-    }
     const productsData: any = await response.json();
     if (!productsData.data || !productsData.data.products) {
+      console.error("Réponse Shopify brute:", JSON.stringify(productsData, null, 2));
+      // Fallback automatique : si on n'a pas déjà essayé sans references, on réessaie sans ce champ
+      if (!triedWithoutReferences && allProductFields) {
+        triedWithoutReferences = true;
+        // On retire 'references' de la requête
+        productsQuery = `
+          query getAllProducts($first: Int!, $after: String, $query: String) {
+            products(first: $first, after: $after, query: $query) {
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
+              edges {
+                node {
+                  id
+                  title
+                  handle
+                  description
+                  status
+                  totalInventory
+                  createdAt
+                  updatedAt
+                  vendor
+                  productType
+                  tags
+                  metafields(first: 250) {
+                    edges {
+                      node {
+                        key
+                        value
+                        namespace
+                        type
+                      }
+                    }
+                  }
+                  variants(first: 250) {
+                    edges {
+                      node {
+                        id
+                        title
+                        sku
+                        price
+                        compareAtPrice
+                        inventoryQuantity
+                        barcode
+                        taxable
+                      }
+                    }
+                  }
+                  images(first: 250) {
+                    edges {
+                      node {
+                        id
+                        url
+                        altText
+                        width
+                        height
+                      }
+                    }
+                  }
+                  collections(first: 250) {
+                    edges {
+                      node {
+                        id
+                        title
+                        handle
+                      }
+                    }
+                  }
+                  category {
+                    id
+                    name
+                  }
+                  seo {
+                    title
+                    description
+                  }
+                  metafield(namespace: "custom", key: "short_description") {
+                    value
+                  }
+                }
+              }
+            }
+          }
+        `;
+        // On relance la boucle sans avancer le curseur
+        continue;
+      }
       throw new Error("Réponse Shopify invalide");
     }
     const products = productsData.data.products.edges.map((edge: any) => edge.node);
