@@ -208,4 +208,136 @@ export function applyNodeSideFilters(products: any[], filters: ReturnType<typeof
     });
   }
   return products;
+}
+
+/**
+ * Récupère les meta taxonomies attribuées automatiquement selon la catégorie
+ * @param products Liste des produits avec leurs métadonnées
+ * @returns Objet contenant les meta taxonomies par catégorie
+ */
+export function extractCategoryMetaTaxonomies(products: any[]) {
+  const categoryMetaTaxonomies: { [categoryName: string]: any[] } = {};
+  
+  products.forEach((product) => {
+    const categoryName = product.category?.name;
+    if (!categoryName) return;
+    
+    // Récupérer les métadonnées du produit
+    const metafields = product.metafields?.edges?.map((edge: any) => edge.node) || [];
+    
+    // Filtrer les métadonnées qui semblent être des taxonomies automatiques
+    const taxonomyMetafields = metafields.filter((metafield: any) => {
+      // Chercher les métadonnées qui pourraient être des taxonomies automatiques
+      // Ces métadonnées sont souvent dans des namespaces spécifiques ou ont des clés particulières
+      const key = metafield.key?.toLowerCase() || '';
+      const namespace = metafield.namespace?.toLowerCase() || '';
+      
+      // Patterns pour identifier les taxonomies automatiques
+      const taxonomyPatterns = [
+        'taxonomy',
+        'category_meta',
+        'auto_meta',
+        'suggested',
+        'recommended',
+        'attributes',
+        'specifications'
+      ];
+      
+      return taxonomyPatterns.some(pattern => 
+        key.includes(pattern) || namespace.includes(pattern)
+      ) || namespace === 'specs'; // Le namespace specs contient souvent les spécifications techniques
+    });
+    
+    if (taxonomyMetafields.length > 0) {
+      if (!categoryMetaTaxonomies[categoryName]) {
+        categoryMetaTaxonomies[categoryName] = [];
+      }
+      
+      // Ajouter les métadonnées de taxonomie pour cette catégorie
+      taxonomyMetafields.forEach((metafield: any) => {
+        const existingIndex = categoryMetaTaxonomies[categoryName].findIndex(
+          (item: any) => item.key === metafield.key && item.namespace === metafield.namespace
+        );
+        
+        if (existingIndex === -1) {
+          categoryMetaTaxonomies[categoryName].push({
+            namespace: metafield.namespace,
+            key: metafield.key,
+            value: metafield.value,
+            type: metafield.type
+          });
+        }
+      });
+    }
+  });
+  
+  return categoryMetaTaxonomies;
+}
+
+/**
+ * Récupère les suggestions de meta taxonomies pour une catégorie spécifique
+ * @param products Liste des produits
+ * @param categoryName Nom de la catégorie
+ * @returns Liste des suggestions de métadonnées pour cette catégorie
+ */
+export function getCategoryMetaSuggestions(products: any[], categoryName: string) {
+  const categoryProducts = products.filter(product => 
+    product.category?.name === categoryName
+  );
+  
+  const suggestions: { [key: string]: any } = {};
+  
+  categoryProducts.forEach((product) => {
+    const metafields = product.metafields?.edges?.map((edge: any) => edge.node) || [];
+    
+    metafields.forEach((metafield: any) => {
+      const key = `${metafield.namespace}.${metafield.key}`;
+      
+      if (!suggestions[key]) {
+        suggestions[key] = {
+          namespace: metafield.namespace,
+          key: metafield.key,
+          type: metafield.type,
+          values: new Set(),
+          count: 0
+        };
+      }
+      
+      if (metafield.value) {
+        suggestions[key].values.add(metafield.value);
+        suggestions[key].count++;
+      }
+    });
+  });
+  
+  // Convertir les Sets en Arrays et trier par fréquence
+  return Object.values(suggestions)
+    .map(suggestion => ({
+      ...suggestion,
+      values: Array.from(suggestion.values),
+      frequency: suggestion.count / categoryProducts.length
+    }))
+    .sort((a, b) => b.frequency - a.frequency);
+}
+
+/**
+ * Récupère les meta taxonomies d'un produit spécifique
+ * @param product Produit avec ses métadonnées
+ * @returns Objet contenant les meta taxonomies du produit
+ */
+export function getProductMetaTaxonomies(product: any) {
+  const metafields = product.metafields?.edges?.map((edge: any) => edge.node) || [];
+  const taxonomies: { [key: string]: any } = {};
+  
+  metafields.forEach((metafield: any) => {
+    const key = `${metafield.namespace}.${metafield.key}`;
+    taxonomies[key] = {
+      namespace: metafield.namespace,
+      key: metafield.key,
+      value: metafield.value,
+      type: metafield.type
+    };
+  });
+  
+  return taxonomies;
 } 

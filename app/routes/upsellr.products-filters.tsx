@@ -7,7 +7,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   if (shopifyAuth.error) {
     return json({ error: shopifyAuth.error.message }, { status: shopifyAuth.error.status });
   }
-  const { token, shopDomain, adminUrl } = shopifyAuth;
+  const { token, adminUrl } = shopifyAuth;
 
   // Récupérer les collections
   const collectionsQuery = `
@@ -76,6 +76,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       }
     }
   `;
+
+  /* Get all vendors */
   const vendorsResp = await fetch(adminUrl, {
     method: 'POST',
     headers: {
@@ -84,6 +86,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     },
     body: JSON.stringify({ query: vendorsQuery })
   });
+
+  /* Get all vendors */
   const vendorsData = await vendorsResp.json();
   const allVendors = (vendorsData.data?.products?.edges || []).map((edge: any) => edge.node.vendor);
   const uniqueVendors = Array.from(new Set(allVendors)).filter(Boolean);
