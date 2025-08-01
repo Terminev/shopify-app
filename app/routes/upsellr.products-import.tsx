@@ -335,8 +335,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (!createdProduct?.id) {
       console.error("❌ Aucun produit retourné par Shopify");
       results.push({ status: "error", error: creationErrors });
-
-      
       continue;
     }
 
