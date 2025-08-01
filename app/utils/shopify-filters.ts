@@ -74,12 +74,10 @@ export async function getAllProductsWithPagination(adminUrl: string, token: stri
                 description
                 status
                 totalInventory
-                createdAt
-                updatedAt
                 vendor
                 productType
                 tags
-                metafields(first: 250) {
+                metafields(first: 50) {
                   edges {
                     node {
                       key
@@ -103,7 +101,7 @@ export async function getAllProductsWithPagination(adminUrl: string, token: stri
                     }
                   }
                 }
-                variants(first: 250) {
+                variants(first: 50) {
                   edges {
                     node {
                       id
@@ -117,18 +115,16 @@ export async function getAllProductsWithPagination(adminUrl: string, token: stri
                     }
                   }
                 }
-                images(first: 250) {
+                images(first: 15) {
                   edges {
                     node {
                       id
                       url
                       altText
-                      width
-                      height
                     }
                   }
                 }
-                collections(first: 250) {
+                collections(first: 10) {
                   edges {
                     node {
                       id
@@ -160,7 +156,7 @@ export async function getAllProductsWithPagination(adminUrl: string, token: stri
             pageInfo { hasNextPage endCursor }
             edges { node {
               id
-              collections(first: 250) { edges { node { id handle } } }
+              collections(first: 15) { edges { node { id handle } } }
               category { id name }
               productType
             }}
@@ -177,7 +173,7 @@ export async function getAllProductsWithPagination(adminUrl: string, token: stri
       },
       body: JSON.stringify({
         query: productsQuery,
-        variables: { first: 250, after: cursor, query: shopifyQuery || undefined }
+        variables: { first: 50, after: cursor, query: shopifyQuery || undefined }
       })
     });
     const productsData: any = await response.json();
@@ -202,12 +198,10 @@ export async function getAllProductsWithPagination(adminUrl: string, token: stri
                   description
                   status
                   totalInventory
-                  createdAt
-                  updatedAt
                   vendor
                   productType
                   tags
-                  metafields(first: 250) {
+                  metafields(first: 50) {
                     edges {
                       node {
                         key
@@ -217,7 +211,7 @@ export async function getAllProductsWithPagination(adminUrl: string, token: stri
                       }
                     }
                   }
-                  variants(first: 250) {
+                  variants(first: 50) {
                     edges {
                       node {
                         id
@@ -227,22 +221,19 @@ export async function getAllProductsWithPagination(adminUrl: string, token: stri
                         compareAtPrice
                         inventoryQuantity
                         barcode
-                        taxable
                       }
                     }
                   }
-                  images(first: 250) {
+                  images(first: 15) {
                     edges {
                       node {
                         id
                         url
                         altText
-                        width
-                        height
                       }
                     }
                   }
-                  collections(first: 250) {
+                  collections(first: 15) {
                     edges {
                       node {
                         id
