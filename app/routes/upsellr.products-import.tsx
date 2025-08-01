@@ -104,10 +104,8 @@ async function filterAccessibleImages(images: string[]): Promise<string[]> {
 }
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  console.log("==> /upsellr/products-import called");
 
   if (request.method !== "POST") {
-    console.log("❌ Mauvaise méthode :", request.method);
     return json(
       { success: false, error: "Méthode non autorisée. Utilisez POST." },
       { status: 405 },
@@ -150,8 +148,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const results: any[] = [];
   for (const prod of body.products) {
     if (!prod.title && !prod.id) continue;
-
-    console.log("==> Traitement produit :", prod.title || prod.id);
 
     const upsellrRawId = prod.upsellr_raw_id ?? null;
 
@@ -221,7 +217,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     variables = { input };
 
     // --- Création ou update du produit ---
-    console.log("📡 Envoi mutation productCreate/productUpdate");
     const resp = await fetch(adminUrl, {
       method: "POST",
       headers: {
@@ -232,7 +227,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
 
     const data = await resp.json();
-    console.log("📥 Réponse produit :", JSON.stringify(data, null, 2));
 
     const createdProduct = prod.id
       ? data.data?.productUpdate?.product
@@ -247,11 +241,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       results.push({ status: "error", error: creationErrors });
       continue;
     }
-    console.log("✅ Produit créé/mis à jour :", createdProduct.id);
 
     // --- MAJ SKU / Barcode ---
     if (prod.sku || prod.ean || (prod.variants && prod.variants.length > 0)) {
-      console.log("==> Début mise à jour SKU/EAN pour :", createdProduct.id);
 
       try {
         const getVariantsQuery = `
@@ -265,7 +257,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       }
     `;
-        console.log("📡 Fetch variants pour :", createdProduct.id);
         const variantsResp = await fetch(adminUrl, {
           method: "POST",
           headers: {
@@ -278,16 +269,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           }),
         });
         const variantsData = await variantsResp.json();
-        console.log(
-          "📥 Variants data :",
-          JSON.stringify(variantsData, null, 2),
-        );
 
         const variants = variantsData.data?.product?.variants?.edges || [];
         if (!variants.length) {
           console.error("⚠️ Aucune variante trouvée → impossible MAJ SKU/EAN");
         } else {
-          console.log(`✅ ${variants.length} variante(s) trouvée(s)`);
 
           // Utiliser GraphQL Admin pour mettre à jour les variantes
           for (let i = 0; i < variants.length; i++) {
@@ -331,11 +317,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               // Le barcode sera géré via une mutation séparée
             };
 
-            console.log(
-              `📤 GraphQL Update variante ${i + 1}:`,
-              JSON.stringify(variantInput, null, 2),
-            );
-
             const graphqlResp = await fetch(adminUrl, {
               method: "POST",
               headers: {
@@ -352,13 +333,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             });
 
             const graphqlData = await graphqlResp.json();
-            console.log(
-              `📥 Résultat GraphQL mise à jour variante ${i + 1}:`,
-              JSON.stringify(graphqlData, null, 2),
-            );
 
             if (graphqlData.data?.productVariantsBulkUpdate?.productVariants) {
-              console.log(`✅ Variante ${i + 1} mise à jour via GraphQL Admin API !`);
               
               // Mettre à jour le barcode via une mutation séparée si nécessaire
               if (updatedBarcode !== variant.node.barcode) {
@@ -381,8 +357,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                   id: variant.node.id,
                   barcode: updatedBarcode,
                 };
-                
-                console.log(`📤 GraphQL Update barcode variante ${i + 1}:`, JSON.stringify(barcodeInput, null, 2));
                 
                 const barcodeResp = await fetch(adminUrl, {
                   method: "POST",

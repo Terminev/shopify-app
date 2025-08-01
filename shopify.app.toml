@@ -3,7 +3,7 @@
 client_id = "2022322134db5403bdd40384bf020a5c"
 name = "upsellr-connector"
 handle = "upsellr-connector-1"
-application_url = "https://app.alexandrechauvin.fr"
+application_url = "https://bmtfbvhk2tc.preview.hosting-ik.com/"
 embedded = true
 
 [build]
@@ -26,7 +26,7 @@ api_version = "2025-07"
 scopes = "write_products,read_metaobjects"
 
 [auth]
-redirect_urls = ["https://app.alexandrechauvin.fr/auth/callback", "https://app.alexandrechauvin.fr/auth/shopify/callback", "https://app.alexandrechauvin.fr/api/auth/callback"]
+redirect_urls = ["https://bmtfbvhk2tc.preview.hosting-ik.com/auth/callback", "https://bmtfbvhk2tc.preview.hosting-ik.com/auth/shopify/callback", "https://bmtfbvhk2tc.preview.hosting-ik.com/api/auth/callback"]
 
 [pos]
 embedded = false
