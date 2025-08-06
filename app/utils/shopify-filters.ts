@@ -602,9 +602,10 @@ export async function getProductMetaTaxonomies(product: any, adminUrl?: string, 
  */
 export async function getMetaobjectDefinitions(adminUrl: string, token: string) {
   try {
+    // Requête plus simple pour tester si l'API fonctionne
     const query = `
-      query getMetaobjectDefinitions {
-        metaobjectDefinitions(first: 250) {
+      query {
+        metaobjectDefinitions(first: 10) {
           edges {
             node {
               id
@@ -615,10 +616,6 @@ export async function getMetaobjectDefinitions(adminUrl: string, token: string) 
                 name
                 description
                 type
-                validations {
-                  name
-                  value
-                }
               }
             }
           }
@@ -626,7 +623,7 @@ export async function getMetaobjectDefinitions(adminUrl: string, token: string) 
       }
     `;
 
-    const response = await fetch(`${adminUrl}/admin/api/2024-01/graphql.json`, {
+    const response = await fetch(adminUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -635,32 +632,38 @@ export async function getMetaobjectDefinitions(adminUrl: string, token: string) 
       body: JSON.stringify({ query }),
     });
 
+    if (!response.ok) {
+      console.error('❌ Erreur HTTP:', response.status, response.statusText);
+      return {};
+    }
+
     const data = await response.json();
     
     if (data.errors) {
-      console.error('❌ Erreur lors de la récupération des metaobject definitions:', data.errors);
+      console.error('❌ Erreur GraphQL:', data.errors);
       return {};
     }
 
     const definitions: { [key: string]: any } = {};
-    data.data.metaobjectDefinitions.edges.forEach((edge: any) => {
-      const definition = edge.node;
-      definitions[definition.type] = {
-        id: definition.id,
-        name: definition.name,
-        type: definition.type,
-        fields: definition.fields.reduce((acc: any, field: any) => {
-          acc[field.key] = {
-            key: field.key,
-            name: field.name,
-            description: field.description,
-            type: field.type,
-            validations: field.validations
-          };
-          return acc;
-        }, {})
-      };
-    });
+    if (data.data?.metaobjectDefinitions?.edges) {
+      data.data.metaobjectDefinitions.edges.forEach((edge: any) => {
+        const definition = edge.node;
+        definitions[definition.type] = {
+          id: definition.id,
+          name: definition.name,
+          type: definition.type,
+          fields: definition.fields.reduce((acc: any, field: any) => {
+            acc[field.key] = {
+              key: field.key,
+              name: field.name,
+              description: field.description,
+              type: field.type
+            };
+            return acc;
+          }, {})
+        };
+      });
+    }
 
     return definitions;
   } catch (error) {
@@ -686,7 +689,11 @@ export function enrichMetaFieldsWithDefinitions(categoryMetaFields: any[], metao
         name: definition.name,
         description: definition.fields?.value?.description || null,
         field_type: definition.fields?.value?.type || null
-      } : null,
+      } : {
+        name: field.key.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
+        description: null,
+        field_type: field.type
+      },
       // Ajouter les informations sur les valeurs possibles si disponibles
       possible_values: definition?.fields?.value?.validations || null
     };
