@@ -595,6 +595,49 @@ export async function getProductMetaTaxonomies(product: any, adminUrl?: string, 
 } 
 
 /**
+ * Récupère la langue de la boutique
+ * @param adminUrl URL de l'API admin Shopify
+ * @param token Token d'authentification
+ * @returns La langue de la boutique
+ */
+async function getShopLanguage(adminUrl: string, token: string): Promise<string> {
+  try {
+    const query = `
+      query {
+        shop {
+          primaryDomain {
+            locale
+          }
+        }
+      }
+    `;
+
+    const response = await fetch(adminUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Shopify-Access-Token': token,
+      },
+      body: JSON.stringify({ query }),
+    });
+
+    if (!response.ok) {
+      return 'en';
+    }
+
+    const data = await response.json();
+    if (data.errors) {
+      return 'en';
+    }
+
+    return data.data?.shop?.primaryDomain?.locale || 'en';
+  } catch (error) {
+    console.error('❌ Erreur lors de la récupération de la langue:', error);
+    return 'en';
+  }
+}
+
+/**
  * Récupère les définitions des metaobject definitions pour obtenir les informations sur les champs
  * @param adminUrl URL de l'API admin Shopify
  * @param token Token d'authentification
@@ -602,10 +645,14 @@ export async function getProductMetaTaxonomies(product: any, adminUrl?: string, 
  */
 export async function getMetaobjectDefinitions(adminUrl: string, token: string) {
   try {
-    // Requête corrigée avec les sélections pour le champ type
+    // Récupérer la langue de la boutique
+    const locale = await getShopLanguage(adminUrl, token);
+    console.log('🌍 Langue de la boutique:', locale);
+
+    // Requête avec support de la localisation
     const query = `
       query {
-        metaobjectDefinitions(first: 10) {
+        metaobjectDefinitions(first: 50) {
           edges {
             node {
               id
@@ -634,6 +681,7 @@ export async function getMetaobjectDefinitions(adminUrl: string, token: string) 
       headers: {
         'Content-Type': 'application/json',
         'X-Shopify-Access-Token': token,
+        'Accept-Language': locale, // Ajouter l'en-tête de langue
       },
       body: JSON.stringify({ query }),
     });
@@ -673,8 +721,6 @@ export async function getMetaobjectDefinitions(adminUrl: string, token: string) 
     }
 
     console.log('✅ Metaobject definitions récupérées:', Object.keys(definitions));
-    console.log('📋 Détails des définitions:', JSON.stringify(definitions, null, 2));
-
     return definitions;
   } catch (error) {
     console.error('❌ Erreur lors de la récupération des metaobject definitions:', error);
