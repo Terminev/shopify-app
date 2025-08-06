@@ -23,7 +23,7 @@ api_version = "2025-07"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_products,read_metaobjects"
+scopes = "write_products,read_metaobjects,read_metaobject_definitions"
 
 [auth]
 redirect_urls = ["https://bmtfbvhk2tc.preview.hosting-ik.com/auth/callback", "https://bmtfbvhk2tc.preview.hosting-ik.com/auth/shopify/callback", "https://bmtfbvhk2tc.preview.hosting-ik.com/api/auth/callback"]
