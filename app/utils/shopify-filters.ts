@@ -593,3 +593,102 @@ export async function getProductMetaTaxonomies(product: any, adminUrl?: string, 
   
   return taxonomies;
 } 
+
+/**
+ * Récupère les définitions des metaobject definitions pour obtenir les informations sur les champs
+ * @param adminUrl URL de l'API admin Shopify
+ * @param token Token d'authentification
+ * @returns Objet contenant les définitions des metaobject definitions
+ */
+export async function getMetaobjectDefinitions(adminUrl: string, token: string) {
+  try {
+    const query = `
+      query getMetaobjectDefinitions {
+        metaobjectDefinitions(first: 250) {
+          edges {
+            node {
+              id
+              name
+              type
+              fields {
+                key
+                name
+                description
+                type
+                validations {
+                  name
+                  value
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
+
+    const response = await fetch(`${adminUrl}/admin/api/2024-01/graphql.json`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Shopify-Access-Token': token,
+      },
+      body: JSON.stringify({ query }),
+    });
+
+    const data = await response.json();
+    
+    if (data.errors) {
+      console.error('❌ Erreur lors de la récupération des metaobject definitions:', data.errors);
+      return {};
+    }
+
+    const definitions: { [key: string]: any } = {};
+    data.data.metaobjectDefinitions.edges.forEach((edge: any) => {
+      const definition = edge.node;
+      definitions[definition.type] = {
+        id: definition.id,
+        name: definition.name,
+        type: definition.type,
+        fields: definition.fields.reduce((acc: any, field: any) => {
+          acc[field.key] = {
+            key: field.key,
+            name: field.name,
+            description: field.description,
+            type: field.type,
+            validations: field.validations
+          };
+          return acc;
+        }, {})
+      };
+    });
+
+    return definitions;
+  } catch (error) {
+    console.error('❌ Erreur lors de la récupération des metaobject definitions:', error);
+    return {};
+  }
+}
+
+/**
+ * Enrichit les meta fields avec les informations des définitions
+ * @param categoryMetaFields Les meta fields de catégorie
+ * @param metaobjectDefinitions Les définitions des metaobject definitions
+ * @returns Les meta fields enrichis avec les informations des définitions
+ */
+export function enrichMetaFieldsWithDefinitions(categoryMetaFields: any[], metaobjectDefinitions: any) {
+  return categoryMetaFields.map(field => {
+    // Chercher la définition correspondante
+    const definition = metaobjectDefinitions[field.key];
+    
+    return {
+      ...field,
+      field_definition: definition ? {
+        name: definition.name,
+        description: definition.fields?.value?.description || null,
+        field_type: definition.fields?.value?.type || null
+      } : null,
+      // Ajouter les informations sur les valeurs possibles si disponibles
+      possible_values: definition?.fields?.value?.validations || null
+    };
+  });
+} 

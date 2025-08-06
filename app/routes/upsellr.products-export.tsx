@@ -7,6 +7,8 @@ import {
   getAllProductsWithPagination,
   applyNodeSideFilters,
   getProductMetaTaxonomies,
+  getMetaobjectDefinitions,
+  enrichMetaFieldsWithDefinitions,
 } from "../utils/shopify-filters";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -28,6 +30,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     true,
   );
   products = applyNodeSideFilters(products, filters);
+
+  // Récupérer les définitions des metaobject definitions pour enrichir les meta fields
+  const metaobjectDefinitions = await getMetaobjectDefinitions(adminUrl, token);
 
   // Pagination dynamique
   const url = new URL(request.url);
@@ -84,6 +89,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           namespace: value.namespace,
         }));
 
+      // Enrichir les meta fields avec les informations des définitions
+      const enrichedCategoryMetaFields = enrichMetaFieldsWithDefinitions(
+        categoryMetaFields,
+        metaobjectDefinitions
+      );
+
       const simplifiedProduct: any = {
         id: product.id,
         title: product.title,
@@ -103,8 +114,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           id: product.category?.id,
           name: product.category?.name,
         },
-        // Meta taxonomies de catégorie (champs automatiques) avec valeurs résolues
-        category_meta_fields: categoryMetaFields,
+        // Meta taxonomies de catégorie (champs automatiques) avec valeurs résolues et définitions enrichies
+        category_meta_fields: enrichedCategoryMetaFields,
       };
 
       // Ajouter les meta taxonomies complètes si demandé
