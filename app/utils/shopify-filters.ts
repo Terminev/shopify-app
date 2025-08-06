@@ -602,7 +602,7 @@ export async function getProductMetaTaxonomies(product: any, adminUrl?: string, 
  */
 export async function getMetaobjectDefinitions(adminUrl: string, token: string) {
   try {
-    // Requête plus simple pour tester si l'API fonctionne
+    // Requête corrigée pour la structure MetaobjectDefinition
     const query = `
       query {
         metaobjectDefinitions(first: 10) {
@@ -611,11 +611,15 @@ export async function getMetaobjectDefinitions(adminUrl: string, token: string) 
               id
               name
               type
-              fields {
+              fieldDefinitions {
                 key
                 name
                 description
                 type
+                validations {
+                  name
+                  value
+                }
               }
             }
           }
@@ -652,18 +656,22 @@ export async function getMetaobjectDefinitions(adminUrl: string, token: string) 
           id: definition.id,
           name: definition.name,
           type: definition.type,
-          fields: definition.fields.reduce((acc: any, field: any) => {
+          fields: definition.fieldDefinitions.reduce((acc: any, field: any) => {
             acc[field.key] = {
               key: field.key,
               name: field.name,
               description: field.description,
-              type: field.type
+              type: field.type,
+              validations: field.validations
             };
             return acc;
           }, {})
         };
       });
     }
+
+    console.log('✅ Metaobject definitions récupérées:', Object.keys(definitions));
+    console.log('📋 Détails des définitions:', JSON.stringify(definitions, null, 2));
 
     return definitions;
   } catch (error) {
