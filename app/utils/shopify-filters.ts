@@ -602,7 +602,7 @@ export async function getProductMetaTaxonomies(product: any, adminUrl?: string, 
  */
 export async function getMetaobjectDefinitions(adminUrl: string, token: string) {
   try {
-    // Requête corrigée pour la structure MetaobjectDefinition
+    // Requête corrigée avec les sélections pour le champ type
     const query = `
       query {
         metaobjectDefinitions(first: 10) {
@@ -615,7 +615,9 @@ export async function getMetaobjectDefinitions(adminUrl: string, token: string) 
                 key
                 name
                 description
-                type
+                type {
+                  name
+                }
                 validations {
                   name
                   value
@@ -661,7 +663,7 @@ export async function getMetaobjectDefinitions(adminUrl: string, token: string) 
               key: field.key,
               name: field.name,
               description: field.description,
-              type: field.type,
+              type: field.type?.name || field.type,
               validations: field.validations
             };
             return acc;
