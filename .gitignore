@@ -1,6 +1,8 @@
 node_modules
 .DS_Store
 
+makefile
+
 /.cache
 /build
 /app/build
