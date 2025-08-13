@@ -2,13 +2,13 @@ import { json } from "@remix-run/node";
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { getShopifyAdminFromToken } from "../utils/shopify-auth";
 
-// Fonction pour vérifier si une image est accessible
+// Function to check if an image is accessible
 async function checkImageAccessibility(imageUrl: string): Promise<boolean> {
   try {
     const response = await fetch(imageUrl, {
       method: "HEAD",
-      // Ajouter un timeout pour éviter les blocages
-      signal: AbortSignal.timeout(10000), // 10 secondes de timeout
+      // Add a timeout to avoid blocking
+      signal: AbortSignal.timeout(10000), // 10 seconds timeout
     });
 
     if (!response.ok) {
@@ -16,51 +16,51 @@ async function checkImageAccessibility(imageUrl: string): Promise<boolean> {
       return false;
     }
 
-    // Vérifier que c'est bien une image
+    // Check that it is actually an image
     const contentType = response.headers.get("content-type");
     if (!contentType || !contentType.startsWith("image/")) {
       console.log(
-        `❌ URL ne pointe pas vers une image (${contentType}): ${imageUrl}`,
+        `❌ URL does not point to an image (${contentType}): ${imageUrl}`,
       );
       return false;
     }
 
-    // Vérifier la taille du contenu si disponible
+    // Check content size if available
     const contentLength = response.headers.get("content-length");
     if (contentLength && parseInt(contentLength) === 0) {
-      console.log(`❌ Image vide (0 bytes): ${imageUrl}`);
+      console.log(`❌ Empty image (0 bytes): ${imageUrl}`);
       return false;
     }
 
-    // Vérification spéciale pour les images Shopify
+    // Special check for Shopify images
     if (imageUrl.includes("cdn.shopify.com")) {
-      // Pour les images Shopify, faire une vérification plus poussée
+      // For Shopify images, do a more thorough check
       try {
         const fullResponse = await fetch(imageUrl, {
           method: "GET",
-          signal: AbortSignal.timeout(15000), // 15 secondes pour le téléchargement complet
+          signal: AbortSignal.timeout(15000), // 15 seconds for full download
         });
 
         if (!fullResponse.ok) {
           console.log(
-            `❌ Image Shopify inaccessible (${fullResponse.status}): ${imageUrl}`,
+            `❌ Shopify image inaccessible (${fullResponse.status}): ${imageUrl}`,
           );
           return false;
         }
 
         const buffer = await fullResponse.arrayBuffer();
         if (buffer.byteLength === 0) {
-          console.log(`❌ Image Shopify vide (0 bytes): ${imageUrl}`);
+          console.log(`❌ Shopify image empty (0 bytes): ${imageUrl}`);
           return false;
         }
 
         console.log(
-          `✅ Image Shopify accessible (${buffer.byteLength} bytes): ${imageUrl}`,
+          `✅ Shopify image accessible (${buffer.byteLength} bytes): ${imageUrl}`,
         );
         return true;
       } catch (shopifyError) {
         console.log(
-          `❌ Erreur lors de la vérification complète de l'image Shopify ${imageUrl}:`,
+          `❌ Error during full check of Shopify image ${imageUrl}:`,
           shopifyError,
         );
         return false;
@@ -71,23 +71,23 @@ async function checkImageAccessibility(imageUrl: string): Promise<boolean> {
     return true;
   } catch (error) {
     console.log(
-      `❌ Erreur lors de la vérification de l'image ${imageUrl}:`,
+      `❌ Error while checking image ${imageUrl}:`,
       error,
     );
     return false;
   }
 }
 
-// Fonction pour filtrer les images accessibles
+// Function to filter accessible images
 async function filterAccessibleImages(images: string[]): Promise<string[]> {
   console.log(
-    `🔍 Vérification de l'accessibilité de ${images.length} images...`,
+    `🔍 Checking accessibility of ${images.length} images...`,
   );
 
   const accessibleImages: string[] = [];
   const inaccessibleImages: string[] = [];
 
-  // Vérifier chaque image en parallèle pour plus de performance
+  // Check each image in parallel for better performance
   const imageChecks = await Promise.allSettled(
     images.map(async (imageUrl) => {
       const isAccessible = await checkImageAccessibility(imageUrl);
@@ -104,20 +104,20 @@ async function filterAccessibleImages(images: string[]): Promise<string[]> {
         inaccessibleImages.push(imageUrl);
       }
     } else {
-      // En cas d'erreur, considérer l'image comme inaccessible
-      console.log(`❌ Erreur lors de la vérification d'une image`);
+      // In case of error, consider the image as inaccessible
+      console.log(`❌ Error while checking an image`);
     }
   }
 
   if (inaccessibleImages.length > 0) {
     console.log(
-      `⚠️ ${inaccessibleImages.length} image(s) inaccessible(s) filtrée(s):`,
+      `⚠️ ${inaccessibleImages.length} inaccessible image(s) filtered:`,
       inaccessibleImages,
     );
   }
 
   console.log(
-    `✅ ${accessibleImages.length} image(s) accessible(s) conservée(s)`,
+    `✅ ${accessibleImages.length} accessible image(s) kept`,
   );
   return accessibleImages;
 }
@@ -125,7 +125,7 @@ async function filterAccessibleImages(images: string[]): Promise<string[]> {
 export const action = async ({ request }: ActionFunctionArgs) => {
   if (request.method !== "POST") {
     return json(
-      { success: false, error: "Méthode non autorisée. Utilisez POST." },
+      { success: false, error: "Method not allowed. Use POST." },
       { status: 405 },
     );
   }
@@ -133,7 +133,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const shopifyAuth = await getShopifyAdminFromToken(request);
   if (shopifyAuth.error) {
     console.error(
-      "❌ Erreur authentification Shopify :",
+      "❌ Shopify authentication error:",
       shopifyAuth.error.message,
     );
     return json(
@@ -148,17 +148,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   try {
     body = await request.json();
   } catch (err) {
-    console.error("❌ Body JSON invalide");
+    console.error("❌ Invalid JSON body");
     return json(
-      { success: false, error: "Body JSON invalide" },
+      { success: false, error: "Invalid JSON body" },
       { status: 400 },
     );
   }
 
   if (!body.products || !Array.isArray(body.products)) {
-    console.error("❌ Le body ne contient pas un tableau products valide");
+    console.error("❌ Body does not contain a valid products array");
     return json(
-      { success: false, error: "Le body doit contenir un tableau 'products'" },
+      { success: false, error: "Body must contain a 'products' array" },
       { status: 400 },
     );
   }
@@ -172,14 +172,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const input: any = { title: prod.title };
     if (prod.description) input.descriptionHtml = prod.description;
     
-    // Logique du statut : UPDATE = garder le statut actuel, CREATE = PENDING par défaut
+    // Status logic: UPDATE = keep current status, CREATE = default to PENDING
     if (prod.id) {
-      // UPDATE : ne pas modifier le statut, laisser celui actuellement défini par l'utilisateur
-      console.log(`🔄 UPDATE - Statut non modifié (gardé tel quel par l'utilisateur)`);
+      // UPDATE: do not modify status, keep as set by the user
+      console.log(`🔄 UPDATE - Status not changed (kept as set by the user)`);
     } else {
-      // CREATE : statut par défaut PENDING
+      // CREATE: default status is PENDING
       input.status = "DRAFT";
-      console.log(`📝 CREATE - Statut défini à PENDING par défaut`);
+      console.log(`📝 CREATE - Status set to PENDING by default`);
     }
     
     if (prod.vendor) input.vendor = prod.vendor;
@@ -200,7 +200,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       });
     }
 
-    // Gestion des spécifications techniques
+    // Handle technical specifications
     if (
       prod.specifications &&
       Array.isArray(prod.specifications) &&
@@ -226,7 +226,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     let variables: any;
     
     if (prod.id) {
-      // Essayer d'abord UPDATE
+      // Try UPDATE first
       mutation = `
         mutation productUpdate($input: ProductInput!) {
           productUpdate(input: $input) {
@@ -236,7 +236,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       `;
     } else {
-      // CREATE direct
+      // Direct CREATE
       mutation = `
         mutation productCreate($input: ProductInput!) {
           productCreate(input: $input) {
@@ -248,7 +248,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
     variables = { input };
 
-    // --- Création ou update du produit ---
+    // --- Product creation or update ---
     const resp = await fetch(adminUrl, {
       method: "POST",
       headers: {
@@ -268,12 +268,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       ? data.data?.productUpdate?.userErrors || []
       : data.data?.productCreate?.userErrors || [];
 
-    // Si UPDATE échoue (produit supprimé), essayer CREATE
+    // If UPDATE fails (product deleted), try CREATE
     if (!createdProduct?.id && prod.id && creationErrors.length > 0) {
-      console.log(`⚠️ UPDATE échoué pour ${prod.id} - Tentative de CREATE à la place`);
-      console.log(`📋 Erreurs détectées:`, JSON.stringify(creationErrors, null, 2));
+      console.log(`⚠️ UPDATE failed for ${prod.id} - Trying CREATE instead`);
+      console.log(`📋 Detected errors:`, JSON.stringify(creationErrors, null, 2));
       
-      // Vérifier si l'erreur indique que le produit n'existe pas
+      // Check if the error indicates the product does not exist
       const productNotFound = creationErrors.some((error: any) => {
         const message = error.message?.toLowerCase() || '';
         return message.includes("not found") || 
@@ -284,14 +284,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                message.includes("does not exist");
       });
       
-      console.log(`🔍 Détection erreur "produit non trouvé": ${productNotFound}`);
+      console.log(`🔍 Detected "product not found" error: ${productNotFound}`);
       
       if (productNotFound) {
-        console.log(`🔄 Produit ${prod.id} supprimé côté Shopify - Création d'un nouveau produit`);
+        console.log(`🔄 Product ${prod.id} deleted on Shopify side - Creating a new product`);
         
-        // Retirer l'ID pour faire un CREATE
+        // Remove ID to do a CREATE
         delete input.id;
-        input.status = "DRAFT"; // Statut par défaut pour nouveau produit
+        input.status = "DRAFT"; // Default status for new product
         
         const createMutation = `
           mutation productCreate($input: ProductInput!) {
@@ -302,7 +302,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           }
         `;
         
-        console.log(`📤 Tentative CREATE avec input:`, JSON.stringify(input, null, 2));
+        console.log(`📤 Trying CREATE with input:`, JSON.stringify(input, null, 2));
         
         const createResp = await fetch(adminUrl, {
           method: "POST",
@@ -317,28 +317,28 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         });
         
         const createData = await createResp.json();
-        console.log(`📥 Réponse CREATE:`, JSON.stringify(createData, null, 2));
+        console.log(`📥 CREATE response:`, JSON.stringify(createData, null, 2));
         
         createdProduct = createData.data?.productCreate?.product;
         creationErrors = createData.data?.productCreate?.userErrors || [];
         
         if (createdProduct?.id) {
-          console.log(`✅ Produit recréé avec succès: ${createdProduct.id}`);
+          console.log(`✅ Product successfully recreated: ${createdProduct.id}`);
         } else {
-          console.error(`❌ Échec de la recréation du produit:`, creationErrors);
+          console.error(`❌ Failed to recreate product:`, creationErrors);
         }
       } else {
-        console.log(`⚠️ Erreur UPDATE non liée à un produit supprimé - Pas de fallback CREATE`);
+        console.log(`⚠️ UPDATE error not related to deleted product - No CREATE fallback`);
       }
     }
 
     if (!createdProduct?.id) {
-      console.error("❌ Aucun produit retourné par Shopify");
+      console.error("❌ No product returned by Shopify");
       results.push({ status: "error", error: creationErrors });
       continue;
     }
 
-    // --- MAJ SKU / Barcode ---
+    // --- Update SKU / Barcode ---
     if (prod.sku || prod.ean || (prod.variants && prod.variants.length > 0)) {
       try {
         const getVariantsQuery = `
@@ -367,13 +367,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
         const variants = variantsData.data?.product?.variants?.edges || [];
         if (!variants.length) {
-          console.error("⚠️ Aucune variante trouvée → impossible MAJ SKU/EAN");
+          console.error("⚠️ No variant found → cannot update SKU/EAN");
         } else {
-          // Utiliser GraphQL Admin pour mettre à jour les variantes
+          // Use GraphQL Admin to update variants
           for (let i = 0; i < variants.length; i++) {
             const variant = variants[i];
 
-            // Utiliser GraphQL Admin pour mettre à jour les variantes via productVariantsBulkUpdate
+            // Use GraphQL Admin to update variants via productVariantsBulkUpdate
             const updateVariantsMutation = `
               mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
                 productVariantsBulkUpdate(productId: $productId, variants: $variants) {
@@ -390,7 +390,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               }
             `;
 
-            // Préparer les données de la variante à mettre à jour
+            // Prepare the variant data to update
             let updatedSku = variant.node.sku;
             let updatedBarcode = variant.node.barcode;
 
@@ -404,11 +404,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
             const variantInput = {
               id: variant.node.id,
-              // Utiliser les champs corrects pour ProductVariantsBulkInput
+              // Use correct fields for ProductVariantsBulkInput
               inventoryItem: {
                 sku: updatedSku,
               },
-              // Le barcode sera géré via une mutation séparée
+              // Barcode will be handled via a separate mutation
             };
 
             const graphqlResp = await fetch(adminUrl, {
@@ -429,7 +429,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             const graphqlData = await graphqlResp.json();
 
             if (graphqlData.data?.productVariantsBulkUpdate?.productVariants) {
-              // Mettre à jour le barcode via une mutation séparée si nécessaire
+              // Update barcode via a separate mutation if needed
               if (updatedBarcode !== variant.node.barcode) {
                 const updateBarcodeMutation = `
                   mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
@@ -471,11 +471,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                   barcodeData.data?.productVariantsBulkUpdate?.productVariants
                 ) {
                   console.log(
-                    `✅ Barcode variante ${i + 1} mis à jour via GraphQL Admin API !`,
+                    `✅ Barcode for variant ${i + 1} updated via GraphQL Admin API!`,
                   );
                 } else {
                   console.error(
-                    `❌ Erreur GraphQL barcode variante ${i + 1}:`,
+                    `❌ GraphQL error updating barcode for variant ${i + 1}:`,
                     JSON.stringify(barcodeData, null, 2),
                   );
                 }
@@ -485,14 +485,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 graphqlData.data?.productVariantsBulkUpdate?.userErrors || [];
               if (userErrors.length > 0) {
                 console.error(
-                  `❌ Erreurs GraphQL variante ${i + 1}:`,
+                  `❌ GraphQL errors for variant ${i + 1}:`,
                   userErrors
                     .map((err: any) => `${err.field}: ${err.message}`)
                     .join(", "),
                 );
               } else {
                 console.error(
-                  `❌ Erreur GraphQL variante ${i + 1}:`,
+                  `❌ GraphQL error for variant ${i + 1}:`,
                   JSON.stringify(graphqlData, null, 2),
                 );
               }
@@ -500,20 +500,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           }
         }
       } catch (err) {
-        console.error("💥 Erreur MAJ SKU/EAN :", err);
+        console.error("💥 Error updating SKU/EAN:", err);
       }
     }
 
-    /* --- MAJ des images --- */
+    /* --- Update images --- */
 
-    // Récupérer les images existantes si c'est un update
+    // Retrieve existing images if this is an update
     let existingMedia: any[] = [];
     if (prod.id && createdProduct) {
       console.log(
-        "🖼️ Début traitement images - Récupération des images existantes",
+        "🖼️ Start image processing - Retrieving existing images",
       );
 
-      // 1. Récupérer les media (images) existants du produit
+      // 1. Retrieve existing media (images) for the product
       const getMediaQuery = `
         query getProductMedia($id: ID!) {
           product(id: $id) {
@@ -532,7 +532,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           }
         }
       `;
-      console.log("📡 Récupération media existants pour:", createdProduct.id);
+      console.log("📡 Retrieving existing media for:", createdProduct.id);
       const getMediaResp = await fetch(adminUrl, {
         method: "POST",
         headers: {
@@ -545,7 +545,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }),
       });
       const getMediaData = await getMediaResp.json();
-      console.log("📥 Media existants:", JSON.stringify(getMediaData, null, 2));
+      console.log("📥 Existing media:", JSON.stringify(getMediaData, null, 2));
 
       const mediaEdges = getMediaData.data?.product?.media?.edges || [];
       existingMedia = mediaEdges
@@ -556,31 +556,31 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         .filter(Boolean);
 
       console.log(
-        `📋 ${existingMedia.length} media existants trouvés:`,
+        `📋 ${existingMedia.length} existing media found:`,
         existingMedia,
       );
     }
 
-    // Suppression sélective des images existantes si update
+    // Selective deletion of existing images if update
     if (prod.id && createdProduct && existingMedia.length > 0) {
-      console.log("🖼️ Suppression sélective des images existantes");
+      console.log("🖼️ Selective deletion of existing images");
 
-      // 2. Identifier les images à supprimer (celles qui ne sont plus dans la nouvelle liste)
+      // 2. Identify images to delete (those no longer in the new list)
       const imagesToKeep = prod.images || [];
       const imagesToDelete = existingMedia.filter((media: any) => {
-        // Garder l'image si elle est dans la nouvelle liste
+        // Keep the image if it is in the new list
         return !imagesToKeep.includes(media.originalSrc);
       });
 
       console.log(
-        `🗑️ ${imagesToDelete.length} image(s) à supprimer (plus dans la liste d'export):`,
+        `🗑️ ${imagesToDelete.length} image(s) to delete (no longer in export list):`,
         imagesToDelete.map((m: any) => m.originalSrc),
       );
       console.log(
-        `✅ ${existingMedia.length - imagesToDelete.length} image(s) conservée(s)`,
+        `✅ ${existingMedia.length - imagesToDelete.length} image(s) kept`,
       );
 
-      // 3. Supprimer seulement les images qui ne sont plus nécessaires
+      // 3. Delete only images that are no longer needed
       if (imagesToDelete.length > 0) {
         const deleteMediaMutation = `
           mutation productDeleteMedia($productId: ID!, $mediaIds: [ID!]!) {
@@ -606,48 +606,48 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         });
         const deleteMediaData = await deleteMediaResp.json();
         console.log(
-          "🗑️ Résultat suppression media:",
+          "🗑️ Media deletion result:",
           JSON.stringify(deleteMediaData, null, 2),
         );
       } else {
-        console.log("ℹ️ Aucune image à supprimer");
+        console.log("ℹ️ No images to delete");
       }
     }
 
-    // Étape 2 : Ajout des images séparément
+    // Step 2: Add images separately
     if (createdProduct && prod.images?.length) {
-      console.log(`🖼️ Vérification et ajout de ${prod.images.length} images`);
-      console.log("📋 Images à vérifier:", prod.images);
+      console.log(`🖼️ Checking and adding ${prod.images.length} images`);
+      console.log("📋 Images to check:", prod.images);
 
-      // Filtrer les images accessibles
+      // Filter accessible images
       const accessibleImages = await filterAccessibleImages(prod.images);
 
       if (accessibleImages.length === 0) {
         console.log(
-          "⚠️ Aucune image accessible trouvée - passage à l'étape suivante",
+          "⚠️ No accessible image found - moving to next step",
         );
       } else {
         console.log(
-          `✅ ${accessibleImages.length} image(s) accessible(s) à ajouter`,
+          `✅ ${accessibleImages.length} accessible image(s) to add`,
         );
 
-        // Si c'est un update, filtrer les images qui existent déjà
+        // If this is an update, filter out images that already exist
         let imagesToAdd = accessibleImages;
         if (prod.id) {
-          // Récupérer les URLs des images existantes
+          // Get URLs of existing images
           const existingImageUrls =
             existingMedia?.map((m: any) => m.originalSrc) || [];
 
-          // Filtrer les images qui n'existent pas déjà
+          // Filter images that do not already exist
           imagesToAdd = accessibleImages.filter(
             (imageUrl: string) => !existingImageUrls.includes(imageUrl),
           );
 
           console.log(
-            `📋 ${accessibleImages.length - imagesToAdd.length} image(s) déjà existante(s) - ignorée(s)`,
+            `📋 ${accessibleImages.length - imagesToAdd.length} image(s) already exist - ignored`,
           );
           console.log(
-            `📤 ${imagesToAdd.length} nouvelle(s) image(s) à ajouter`,
+            `📤 ${imagesToAdd.length} new image(s) to add`,
           );
         }
 
@@ -681,7 +681,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           };
 
           console.log(
-            "📤 Variables création media:",
+            "📤 Media creation variables:",
             JSON.stringify(imageVariables, null, 2),
           );
 
@@ -699,13 +699,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
           const createMediaData = await createMediaResp.json();
           console.log(
-            "📥 Résultat création media:",
+            "📥 Media creation result:",
             JSON.stringify(createMediaData, null, 2),
           );
 
           if (createMediaData.errors) {
             console.error(
-              "❌ Erreurs création media:",
+              "❌ Media creation errors:",
               JSON.stringify(createMediaData.errors, null, 2),
             );
           }
@@ -714,12 +714,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             createMediaData.data?.productCreateMedia?.mediaUserErrors || [];
           if (mediaUserErrors.length > 0) {
             console.error(
-              "⚠️ Erreurs utilisateur création media:",
+              "⚠️ User errors during media creation:",
               JSON.stringify(mediaUserErrors, null, 2),
             );
           }
 
-          // Vérifier si les images ont été correctement créées
+          // Check if images were created successfully
           const createdMedia =
             createMediaData.data?.productCreateMedia?.media || [];
           const failedImages = createdMedia.filter(
@@ -728,7 +728,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
           if (failedImages.length > 0) {
             console.error(
-              `❌ ${failedImages.length} image(s) n'ont pas pu être traitées par Shopify:`,
+              `❌ ${failedImages.length} image(s) could not be processed by Shopify:`,
               failedImages.map((m: any) => m.id),
             );
           }
@@ -738,35 +738,35 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           );
           if (successfulImages.length > 0) {
             console.log(
-              `✅ ${successfulImages.length} image(s) créée(s) avec succès`,
+              `✅ ${successfulImages.length} image(s) created successfully`,
             );
           }
 
           if (mediaUserErrors.length === 0 && failedImages.length === 0) {
-            console.log("✅ Tous les media ont été créés avec succès");
+            console.log("✅ All media created successfully");
           } else {
             console.log(
-              "⚠️ Certains media n'ont pas pu être créés correctement",
+              "⚠️ Some media could not be created properly",
             );
           }
         } else {
-          console.log("ℹ️ Aucune nouvelle image à ajouter");
+          console.log("ℹ️ No new images to add");
         }
       }
     } else {
-      console.log("ℹ️ Aucune image à ajouter");
+      console.log("ℹ️ No images to add");
     }
 
-    // Ajout aux collections
+    // Add to collections
     let collectionErrors: any[] = [];
     if (createdProduct) {
-      console.log("📚 Début traitement collections");
+      console.log("📚 Start processing collections");
 
-      // Si update, retirer le produit de toutes les collections existantes avant d'ajouter les nouvelles (ou rien si prod.collections vide)
+      // If update, remove the product from all existing collections before adding new ones (or nothing if prod.collections is empty)
       if (prod.id) {
-        console.log("🔄 Mode UPDATE - Suppression des collections existantes");
+        console.log("🔄 UPDATE mode - Removing existing collections");
 
-        // 1. Récupérer toutes les collections du produit
+        // 1. Retrieve all collections for the product
         const getCollectionsQuery = `
           query getProductCollections($id: ID!) {
             product(id: $id) {
@@ -776,7 +776,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             }
           }
         `;
-        console.log("📡 Récupération collections existantes");
+        console.log("📡 Retrieving existing collections");
         const getCollectionsResp = await fetch(adminUrl, {
           method: "POST",
           headers: {
@@ -790,7 +790,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         });
         const getCollectionsData = await getCollectionsResp.json();
         console.log(
-          "📥 Collections existantes:",
+          "📥 Existing collections:",
           JSON.stringify(getCollectionsData, null, 2),
         );
 
@@ -799,14 +799,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             (edge: any) => edge.node.id,
           ) || [];
         console.log(
-          `🗑️ Suppression de ${currentCollections.length} collections:`,
+          `🗑️ Removing from ${currentCollections.length} collections:`,
           currentCollections,
         );
 
-        // 2. Retirer le produit de chaque collection
+        // 2. Remove the product from each collection
         for (const collectionId of currentCollections) {
           console.log(
-            `🗑️ Suppression du produit de la collection: ${collectionId}`,
+            `🗑️ Removing product from collection: ${collectionId}`,
           );
           const removeFromCollectionMutation = `
             mutation removeProductFromCollection($id: ID!, $productIds: [ID!]!) {
@@ -828,7 +828,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           });
           const removeData = await removeResp.json();
           console.log(
-            `📥 Résultat suppression collection ${collectionId}:`,
+            `📥 Collection removal result ${collectionId}:`,
             JSON.stringify(removeData, null, 2),
           );
 
@@ -837,7 +837,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             removeData.data?.collectionRemoveProducts?.userErrors?.length
           ) {
             console.error(
-              `❌ Erreur suppression collection ${collectionId}:`,
+              `❌ Error removing from collection ${collectionId}:`,
               JSON.stringify(removeData, null, 2),
             );
             collectionErrors.push({
@@ -848,15 +848,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           }
         }
       }
-      // Ajout aux nouvelles collections (logique existante)
+      // Add to new collections (existing logic)
       if (prod.collections && prod.collections.length) {
         console.log(
-          `📚 Ajout aux ${prod.collections.length} nouvelles collections:`,
+          `📚 Adding to ${prod.collections.length} new collections:`,
           prod.collections,
         );
 
         for (const collectionId of prod.collections) {
-          console.log(`➕ Ajout du produit à la collection: ${collectionId}`);
+          console.log(`➕ Adding product to collection: ${collectionId}`);
           const addToCollectionMutation = `
             mutation addProductToCollection($id: ID!, $productIds: [ID!]!) {
               collectionAddProducts(id: $id, productIds: $productIds) {
@@ -878,7 +878,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
           const collectionData = await collectionResp.json();
           console.log(
-            `📥 Résultat ajout collection ${collectionId}:`,
+            `📥 Collection add result ${collectionId}:`,
             JSON.stringify(collectionData, null, 2),
           );
 
@@ -887,7 +887,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             collectionData.data?.collectionAddProducts?.userErrors?.length
           ) {
             console.error(
-              `❌ Erreur ajout collection ${collectionId}:`,
+              `❌ Error adding to collection ${collectionId}:`,
               JSON.stringify(collectionData, null, 2),
             );
             collectionErrors.push({
@@ -898,12 +898,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             });
           } else {
             console.log(
-              `✅ Produit ajouté avec succès à la collection ${collectionId}`,
+              `✅ Product successfully added to collection ${collectionId}`,
             );
           }
         }
       } else {
-        console.log("ℹ️ Aucune collection à ajouter");
+        console.log("ℹ️ No collections to add");
       }
     }
 

@@ -5,16 +5,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   try {
     const { shop, topic } = await authenticate.webhook(request);
     
-    console.log(`📡 Webhook reçu: ${topic} pour ${shop}`);
+    console.log(`📡 Webhook received: ${topic} for ${shop}`);
     
-    // Traitement spécifique pour app/scopes_update
+    // Specific handling for app/scopes_update
     if (topic === "app/scopes_update") {
-      console.log(`🔄 Mise à jour des scopes pour ${shop}`);
-      // Ici tu peux ajouter la logique pour gérer les changements de scopes
-      // Par exemple, mettre à jour les permissions en base de données
+      console.log(`🔄 Updating scopes for ${shop}`);
+      // Here you can add logic to handle scope changes
+      // For example, update permissions in the database
     }
     
-    // Retourner une réponse 200 OK
+    // Return a 200 OK response
     return new Response("OK", { 
       status: 200,
       headers: {
@@ -23,9 +23,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
     
   } catch (error) {
-    console.error(`❌ Erreur webhook app/scopes_update:`, error);
+    console.error(`❌ Error webhook app/scopes_update:`, error);
     
-    // Retourner une erreur 500 pour que Shopify retry
+    // Return a 500 error so Shopify will retry
     return new Response("Internal Server Error", { 
       status: 500,
       headers: {

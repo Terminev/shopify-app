@@ -24,17 +24,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const productId = params.get('product_id');
   const includeSuggestions = params.get('include_suggestions') === 'true';
 
-  // Récupérer tous les produits avec leurs métadonnées
+  // Retrieve all products with their metadata
   const filters = parseProductFilters(request);
   const shopifyQuery = buildShopifyQuery(filters);
   let products = await getAllProductsWithPagination(adminUrl, token, shopifyQuery, true);
   products = applyNodeSideFilters(products, filters);
 
-  // Si on demande un produit spécifique
+  // If a specific product is requested
   if (productId) {
     const product = products.find(p => p.id === productId);
     if (!product) {
-      return json({ success: false, error: "Produit non trouvé" }, { status: 404 });
+      return json({ success: false, error: "Product not found" }, { status: 404 });
     }
     
     const productTaxonomies = await getProductMetaTaxonomies(product, adminUrl, token);
@@ -46,14 +46,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     });
   }
 
-  // Si on demande une catégorie spécifique
+  // If a specific category is requested
   if (categoryName) {
     const categoryProducts = products.filter(product => 
       product.category?.name === categoryName
     );
     
     if (categoryProducts.length === 0) {
-      return json({ success: false, error: "Catégorie non trouvée" }, { status: 404 });
+      return json({ success: false, error: "Category not found" }, { status: 404 });
     }
 
     const categoryTaxonomies = extractCategoryMetaTaxonomies(categoryProducts);
@@ -71,10 +71,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return json(result);
   }
 
-  // Sinon, retourner toutes les meta taxonomies par catégorie
+  // Otherwise, return all meta taxonomies by category
   const allCategoryTaxonomies = extractCategoryMetaTaxonomies(products);
   
-  // Compter les produits par catégorie
+  // Count products per category
   const categoryStats: { [categoryName: string]: number } = {};
   products.forEach(product => {
     const categoryName = product.category?.name;

@@ -5,16 +5,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   try {
     const { shop, topic } = await authenticate.webhook(request);
     
-    console.log(`📡 Webhook reçu: ${topic} pour ${shop}`);
+    console.log(`📡 Webhook received: ${topic} for ${shop}`);
     
-    // Traitement spécifique pour app/uninstalled
+    // Specific handling for app/uninstalled
     if (topic === "app/uninstalled") {
-      console.log(`🗑️ App désinstallée pour ${shop}`);
-      // Ici tu peux ajouter la logique pour nettoyer les données
-      // Par exemple, supprimer les données du shop de la base de données
+      console.log(`🗑️ App uninstalled for ${shop}`);
     }
     
-    // Retourner une réponse 200 OK
+    // Return a 200 OK response
     return new Response("OK", { 
       status: 200,
       headers: {
@@ -23,9 +21,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
     
   } catch (error) {
-    console.error(`❌ Erreur webhook app/uninstalled:`, error);
+    console.error(`❌ Error webhook app/uninstalled:`, error);
     
-    // Retourner une erreur 500 pour que Shopify retry
+    // Return a 500 error so Shopify will retry
     return new Response("Internal Server Error", { 
       status: 500,
       headers: {

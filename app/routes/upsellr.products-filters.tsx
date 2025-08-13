@@ -9,7 +9,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
   const { token, adminUrl } = shopifyAuth;
 
-  // Récupérer les collections
+  // Retrieve collections
   const collectionsQuery = `
     query getCollections {
       collections(first: 250) {
@@ -36,7 +36,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     label: edge.node.title,
   }));
 
-  // Récupérer les catégories des produits
+  // Retrieve product categories
   const categoriesQuery = `
     query getProductCategories {
       products(first: 250) {
@@ -62,7 +62,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const categoriesData = await categoriesResp.json();
   const allCategories = (categoriesData.data?.products?.edges || [])
     .map((edge: any) => edge.node.category)
-    .filter(Boolean); // Filtrer les catégories null/undefined
+    .filter(Boolean); // Filter out null/undefined categories
   const uniqueCategories = Array.from(new Set(allCategories.map((cat: any) => cat.id)));
   const categories = uniqueCategories.map((categoryId: any) => {
     const category = allCategories.find((cat: any) => cat.id === categoryId);
@@ -72,7 +72,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     };
   });
 
-  // Récupérer les types de produits à partir des produits
+  // Retrieve product types from products
   const productTypesQuery = `
     query getProductTypesFromProducts {
       products(first: 250) {
@@ -100,7 +100,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     label: type,
   }));
 
-  // Récupérer les vendors (fournisseurs) à partir des produits
+  // Retrieve vendors (suppliers) from products
   const vendorsQuery = `
     query getVendorsFromProducts {
       products(first: 250) {
@@ -113,7 +113,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   `;
 
-  /* Get all vendors */
+  // Get all vendors
   const vendorsResp = await fetch(adminUrl, {
     method: 'POST',
     headers: {
@@ -123,7 +123,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     body: JSON.stringify({ query: vendorsQuery })
   });
 
-  /* Get all vendors */
+  // Get all vendors
   const vendorsData = await vendorsResp.json();
   const allVendors = (vendorsData.data?.products?.edges || []).map((edge: any) => edge.node.vendor);
   const uniqueVendors = Array.from(new Set(allVendors)).filter(Boolean);

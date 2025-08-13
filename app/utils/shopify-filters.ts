@@ -178,11 +178,11 @@ export async function getAllProductsWithPagination(adminUrl: string, token: stri
     });
     const productsData: any = await response.json();
     if (!productsData.data || !productsData.data.products) {
-      console.error("Réponse Shopify brute:", JSON.stringify(productsData, null, 2));
-      // Fallback automatique : si on n'a pas déjà essayé sans references, on réessaie sans ce champ
+      console.error("Raw Shopify response:", JSON.stringify(productsData, null, 2));
+      // Automatic fallback: if we haven't already tried without references, try again without this field
       if (!triedWithoutReferences && allProductFields) {
         triedWithoutReferences = true;
-        // On retire 'references' de la requête
+        // Remove 'references' from the query
         productsQuery = `
           query getAllProducts($first: Int!, $after: String, $query: String) {
             products(first: $first, after: $after, query: $query) {
@@ -258,10 +258,10 @@ export async function getAllProductsWithPagination(adminUrl: string, token: stri
             }
           }
         `;
-        // On relance la boucle sans avancer le curseur
+        // Restart the loop without advancing the cursor
         continue;
       }
-      throw new Error("Réponse Shopify invalide");
+      throw new Error("Invalid Shopify response");
     }
     const products = productsData.data.products.edges.map((edge: any) => edge.node);
     allProducts.push(...products);
@@ -285,7 +285,7 @@ export function applyNodeSideFilters(products: any[], filters: ReturnType<typeof
       return !productCollections.some((c: any) => filters.collectionsExcluded!.includes(c.handle) || filters.collectionsExcluded!.includes(c.id));
     });
   }
-  // Catégories
+  // Categories
   if (filters.categoriesIncluded) {
     products = products.filter((product: any) => {
       const catName = product.category?.name;
@@ -304,9 +304,9 @@ export function applyNodeSideFilters(products: any[], filters: ReturnType<typeof
 }
 
 /**
- * Récupère les meta taxonomies attribuées automatiquement selon la catégorie
- * @param products Liste des produits avec leurs métadonnées
- * @returns Objet contenant les meta taxonomies par catégorie
+ * Retrieves the meta taxonomies automatically assigned according to the category
+ * @param products List of products with their metadata
+ * @returns Object containing meta taxonomies by category
  */
 export function extractCategoryMetaTaxonomies(products: any[]) {
   const categoryMetaTaxonomies: { [categoryName: string]: any[] } = {};
@@ -315,17 +315,17 @@ export function extractCategoryMetaTaxonomies(products: any[]) {
     const categoryName = product.category?.name;
     if (!categoryName) return;
     
-    // Récupérer les métadonnées du produit
+    // Retrieve the product's metafields
     const metafields = product.metafields?.edges?.map((edge: any) => edge.node) || [];
     
-    // Filtrer les métadonnées qui semblent être des taxonomies automatiques
+    // Filter metafields that appear to be automatic taxonomies
     const taxonomyMetafields = metafields.filter((metafield: any) => {
-      // Chercher les métadonnées qui pourraient être des taxonomies automatiques
-      // Ces métadonnées sont souvent dans des namespaces spécifiques ou ont des clés particulières
+      // Look for metafields that could be automatic taxonomies
+      // These metafields are often in specific namespaces or have particular keys
       const key = metafield.key?.toLowerCase() || '';
       const namespace = metafield.namespace?.toLowerCase() || '';
       
-      // Patterns pour identifier les taxonomies automatiques
+      // Patterns to identify automatic taxonomies
       const taxonomyPatterns = [
         'taxonomy',
         'category_meta',
@@ -338,7 +338,7 @@ export function extractCategoryMetaTaxonomies(products: any[]) {
       
       return taxonomyPatterns.some(pattern => 
         key.includes(pattern) || namespace.includes(pattern)
-      ) || namespace === 'specs'; // Le namespace specs contient souvent les spécifications techniques
+      ) || namespace === 'specs'; // The 'specs' namespace often contains technical specifications
     });
     
     if (taxonomyMetafields.length > 0) {
@@ -346,7 +346,7 @@ export function extractCategoryMetaTaxonomies(products: any[]) {
         categoryMetaTaxonomies[categoryName] = [];
       }
       
-      // Ajouter les métadonnées de taxonomie pour cette catégorie
+      // Add taxonomy metafields for this category
       taxonomyMetafields.forEach((metafield: any) => {
         const existingIndex = categoryMetaTaxonomies[categoryName].findIndex(
           (item: any) => item.key === metafield.key && item.namespace === metafield.namespace
@@ -368,10 +368,10 @@ export function extractCategoryMetaTaxonomies(products: any[]) {
 }
 
 /**
- * Récupère les suggestions de meta taxonomies pour une catégorie spécifique
- * @param products Liste des produits
- * @param categoryName Nom de la catégorie
- * @returns Liste des suggestions de métadonnées pour cette catégorie
+ * Retrieves meta taxonomy suggestions for a specific category
+ * @param products List of products
+ * @param categoryName Name of the category
+ * @returns List of metadata suggestions for this category
  */
 export function getCategoryMetaSuggestions(products: any[], categoryName: string) {
   const categoryProducts = products.filter(product => 
@@ -403,7 +403,7 @@ export function getCategoryMetaSuggestions(products: any[], categoryName: string
     });
   });
   
-  // Convertir les Sets en Arrays et trier par fréquence
+  // Convert Sets to Arrays and sort by frequency
   return Object.values(suggestions)
     .map(suggestion => ({
       ...suggestion,
@@ -414,37 +414,37 @@ export function getCategoryMetaSuggestions(products: any[], categoryName: string
 }
 
 /**
- * Résout les références de metaobjects pour obtenir les labels
- * @param metafield Metafield avec ses références
- * @param adminUrl URL de l'API admin Shopify
- * @param token Token d'authentification
- * @returns Valeur avec les labels résolus
+ * Resolves metaobject references to get labels
+ * @param metafield Metafield with its references
+ * @param adminUrl Shopify admin API URL
+ * @param token Authentication token
+ * @returns Value with resolved labels
  */
 async function resolveMetaobjectReferences(metafield: any, adminUrl?: string, token?: string): Promise<any> {
-  // Si pas de références dans la réponse, essayer de récupérer les metaobjects séparément
+  // If there are no references in the response, try to fetch metaobjects separately
   if (!metafield.references?.edges?.length && (metafield.type === 'list.metaobject_reference' || metafield.type === 'metaobject_reference')) {
     if (!adminUrl || !token) {
-      console.log(`⚠️ Pas de contexte pour résoudre les metaobjects: ${metafield.key}`);
-      return metafield.value; // Pas possible de résoudre sans contexte
+      console.log(`⚠️ No context to resolve metaobjects: ${metafield.key}`);
+      return metafield.value; // Not possible to resolve without context
     }
 
     try {
-      // Parser la valeur pour extraire les IDs
+      // Parse the value to extract IDs
       let metaobjectIds: string[] = [];
       if (metafield.type === 'list.metaobject_reference') {
         try {
           metaobjectIds = JSON.parse(metafield.value);
         } catch (e) {
-          console.log(`❌ Erreur parsing JSON pour ${metafield.key}:`, e);
+          console.log(`❌ Error parsing JSON for ${metafield.key}:`, e);
           return metafield.value;
         }
       } else {
         metaobjectIds = [metafield.value];
       }
 
-      console.log(`🔍 Tentative de résolution de ${metaobjectIds.length} metaobject(s) pour ${metafield.key}:`, metaobjectIds);
+      console.log(`🔍 Attempting to resolve ${metaobjectIds.length} metaobject(s) for ${metafield.key}:`, metaobjectIds);
 
-      // Récupérer les metaobjects un par un
+      // Fetch metaobjects one by one
       const resolvedReferences = [];
       for (const metaobjectId of metaobjectIds) {
         const metaobjectQuery = `
@@ -460,7 +460,7 @@ async function resolveMetaobjectReferences(metafield: any, adminUrl?: string, to
           }
         `;
 
-        console.log(`📡 Requête metaobject pour ${metaobjectId}`);
+        console.log(`📡 Metaobject request for ${metaobjectId}`);
         
         const response = await fetch(adminUrl, {
           method: 'POST',
@@ -475,18 +475,18 @@ async function resolveMetaobjectReferences(metafield: any, adminUrl?: string, to
         });
 
         const metaobjectData = await response.json();
-        console.log(`📥 Réponse metaobject pour ${metaobjectId}:`, JSON.stringify(metaobjectData, null, 2));
+        console.log(`📥 Metaobject response for ${metaobjectId}:`, JSON.stringify(metaobjectData, null, 2));
 
         if (metaobjectData.data?.metaobject) {
           const metaobject = metaobjectData.data.metaobject;
-          console.log(`✅ Metaobject trouvé:`, metaobject);
+          console.log(`✅ Metaobject found:`, metaobject);
           
           const titleField = metaobject.fields.find((field: any) => 
             field.key === 'title' || field.key === 'name' || field.key === 'label'
           );
           
           const label = titleField?.value || metaobject.type;
-          console.log(`🏷️ Label trouvé: "${label}" (champ: ${titleField?.key || 'type'})`);
+          console.log(`🏷️ Label found: "${label}" (field: ${titleField?.key || 'type'})`);
           
           resolvedReferences.push({
             id: metaobjectId,
@@ -494,14 +494,14 @@ async function resolveMetaobjectReferences(metafield: any, adminUrl?: string, to
             type: metaobject.type
           });
         } else if (metaobjectData.errors) {
-          console.error(`❌ Erreur GraphQL pour ${metaobjectId}:`, metaobjectData.errors);
+          console.error(`❌ GraphQL error for ${metaobjectId}:`, metaobjectData.errors);
           resolvedReferences.push({
             id: metaobjectId,
             label: 'Error: ' + metaobjectData.errors[0]?.message || 'Unknown',
             type: 'error'
           });
         } else {
-          console.log(`❓ Metaobject non trouvé pour ${metaobjectId}`);
+          console.log(`❓ Metaobject not found for ${metaobjectId}`);
           resolvedReferences.push({
             id: metaobjectId,
             label: 'Unknown',
@@ -512,25 +512,25 @@ async function resolveMetaobjectReferences(metafield: any, adminUrl?: string, to
 
       return metafield.type === 'list.metaobject_reference' ? resolvedReferences : resolvedReferences[0];
     } catch (error) {
-      console.error('❌ Erreur lors de la résolution des metaobjects:', error);
+      console.error('❌ Error while resolving metaobjects:', error);
       return metafield.value;
     }
   }
 
-  // Si on a des références dans la réponse
+  // If we have references in the response
   if (metafield.references?.edges?.length) {
     const references = metafield.references.edges.map((edge: any) => edge.node);
     
-    // Si c'est un tableau de références (comme dans les métadonnées JSON)
+    // If it's an array of references (like in JSON metafields)
     if (metafield.type === 'list.metaobject_reference' || metafield.type === 'json') {
       try {
-        // Essayer de parser la valeur comme JSON
+        // Try to parse the value as JSON
         const valueArray = JSON.parse(metafield.value);
         if (Array.isArray(valueArray)) {
           return valueArray.map((refId: string) => {
             const reference = references.find((ref: any) => ref.id === refId);
             if (reference) {
-              // Chercher le champ 'title' ou 'name' ou le premier champ disponible
+              // Look for the 'title', 'name', or first available field
               const titleField = reference.fields.find((field: any) => 
                 field.key === 'title' || field.key === 'name' || field.key === 'label'
               );
@@ -544,11 +544,11 @@ async function resolveMetaobjectReferences(metafield: any, adminUrl?: string, to
           });
         }
       } catch (e) {
-        // Si ce n'est pas du JSON, traiter comme une référence simple
+        // If not JSON, treat as a simple reference
       }
     }
 
-    // Pour les références simples
+    // For simple references
     if (references.length === 1) {
       const reference = references[0];
       const titleField = reference.fields.find((field: any) => 
@@ -566,12 +566,12 @@ async function resolveMetaobjectReferences(metafield: any, adminUrl?: string, to
 }
 
 /**
- * Récupère les meta taxonomies d'un produit spécifique avec les labels résolus
- * @param product Produit avec ses métadonnées
- * @param adminUrl URL de l'API admin Shopify (optionnel, pour résoudre les metaobjects)
- * @param token Token d'authentification (optionnel, pour résoudre les metaobjects)
-* @returns Objet contenant les meta taxonomies du produit
-*/
+ * Retrieves the meta taxonomies of a specific product with resolved labels
+ * @param product Product with its metadata
+ * @param adminUrl Shopify admin API URL (optional, to resolve metaobjects)
+ * @param token Authentication token (optional, to resolve metaobjects)
+ * @returns Object containing the product's meta taxonomies
+ */
 export async function getProductMetaTaxonomies(product: any, adminUrl?: string, token?: string, skipMetaobjectResolution?: boolean) {
   const metafields = product.metafields?.edges?.map((edge: any) => edge.node) || [];
   const taxonomies: { [key: string]: any } = {};
@@ -579,7 +579,7 @@ export async function getProductMetaTaxonomies(product: any, adminUrl?: string, 
   for (const metafield of metafields) {
     const key = `${metafield.namespace || 'undefined'}.${metafield.key}`;
     
-    // Résoudre les références de metaobjects (async maintenant)
+    // Resolve metaobject references (now async)
     const resolvedValue = skipMetaobjectResolution ? metafield.value : await resolveMetaobjectReferences(metafield, adminUrl, token);
     
     taxonomies[key] = {
@@ -587,7 +587,7 @@ export async function getProductMetaTaxonomies(product: any, adminUrl?: string, 
       key: metafield.key,
       value: resolvedValue,
       type: metafield.type,
-      original_value: metafield.value // Garder la valeur originale pour référence
+      original_value: metafield.value // Keep the original value for reference
     };
   }
   
@@ -595,10 +595,10 @@ export async function getProductMetaTaxonomies(product: any, adminUrl?: string, 
 } 
 
 /**
- * Récupère la langue de la boutique
- * @param adminUrl URL de l'API admin Shopify
- * @param token Token d'authentification
- * @returns La langue de la boutique
+ * Retrieves the shop's language
+ * @param adminUrl Shopify admin API URL
+ * @param token Authentication token
+ * @returns The shop's language
  */
 async function getShopLanguage(adminUrl: string, token: string): Promise<string> {
   try {
@@ -632,24 +632,24 @@ async function getShopLanguage(adminUrl: string, token: string): Promise<string>
 
     return data.data?.shop?.primaryDomain?.locale || 'en';
   } catch (error) {
-    console.error('❌ Erreur lors de la récupération de la langue:', error);
+    console.error('❌ Error while retrieving shop language:', error);
     return 'en';
   }
 }
 
 /**
- * Récupère les définitions des metaobject definitions pour obtenir les informations sur les champs
- * @param adminUrl URL de l'API admin Shopify
- * @param token Token d'authentification
- * @returns Objet contenant les définitions des metaobject definitions
+ * Retrieves metaobject definitions to get information about fields
+ * @param adminUrl Shopify admin API URL
+ * @param token Authentication token
+ * @returns Object containing metaobject definitions
  */
 export async function getMetaobjectDefinitions(adminUrl: string, token: string) {
   try {
-    // Récupérer la langue de la boutique
+    // Retrieve the shop's language
     const locale = await getShopLanguage(adminUrl, token);
-    console.log('🌍 Langue de la boutique:', locale);
+    console.log('🌍 Shop language:', locale);
 
-    // Requête avec support de la localisation
+    // Query with localization support
     const query = `
       query {
         metaobjectDefinitions(first: 50) {
@@ -681,20 +681,20 @@ export async function getMetaobjectDefinitions(adminUrl: string, token: string) 
       headers: {
         'Content-Type': 'application/json',
         'X-Shopify-Access-Token': token,
-        'Accept-Language': locale, // Ajouter l'en-tête de langue
+        'Accept-Language': locale, // Add language header
       },
       body: JSON.stringify({ query }),
     });
 
     if (!response.ok) {
-      console.error('❌ Erreur HTTP:', response.status, response.statusText);
+      console.error('❌ HTTP error:', response.status, response.statusText);
       return {};
     }
 
     const data = await response.json();
     
     if (data.errors) {
-      console.error('❌ Erreur GraphQL:', data.errors);
+      console.error('❌ GraphQL error:', data.errors);
       return {};
     }
 
@@ -720,23 +720,23 @@ export async function getMetaobjectDefinitions(adminUrl: string, token: string) 
       });
     }
 
-    console.log('✅ Metaobject definitions récupérées:', Object.keys(definitions));
+    console.log('✅ Metaobject definitions retrieved:', Object.keys(definitions));
     return definitions;
   } catch (error) {
-    console.error('❌ Erreur lors de la récupération des metaobject definitions:', error);
+    console.error('❌ Error while retrieving metaobject definitions:', error);
     return {};
   }
 }
 
 /**
- * Enrichit les meta fields avec les informations des définitions
- * @param categoryMetaFields Les meta fields de catégorie
- * @param metaobjectDefinitions Les définitions des metaobject definitions
- * @returns Les meta fields enrichis avec les informations des définitions
+ * Enriches meta fields with information from definitions
+ * @param categoryMetaFields The category meta fields
+ * @param metaobjectDefinitions The metaobject definitions
+ * @returns The meta fields enriched with definition information
  */
 export function enrichMetaFieldsWithDefinitions(categoryMetaFields: any[], metaobjectDefinitions: any) {
   return categoryMetaFields.map(field => {
-    // Chercher la définition correspondante
+    // Look for the corresponding definition
     const definition = metaobjectDefinitions[field.key];
     
     return {
@@ -750,7 +750,7 @@ export function enrichMetaFieldsWithDefinitions(categoryMetaFields: any[], metao
         description: null,
         field_type: field.type
       },
-      // Ajouter les informations sur les valeurs possibles si disponibles
+      // Add information about possible values if available
       possible_values: definition?.fields?.value?.validations || null
     };
   });

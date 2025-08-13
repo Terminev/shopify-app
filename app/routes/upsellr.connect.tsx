@@ -6,7 +6,7 @@ import { DataService } from "../utils/data-service";
 import pkg from '../../package.json';
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  // On lit shop et token dans l'URL (query params), même en POST
+  // Read shop and token from the URL (query params)
   const shopifyAuth = await getShopifyAdminFromToken(request);
   // @ts-ignore
   const version = pkg.version || '1.0.0';
@@ -19,14 +19,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const dataService = DataService.getInstance();
   
   try {
-    // Extraire l'ID du shop depuis le domaine
+    // Extract the shop ID from the domain
     const shopId = `gid://shopify/Shop/${shopDomain.split('.')[0]}`;
     const shopUrl = `https://${shopDomain}`;
     
-    // Enregistrer la connexion boutique en base
+    // Save the shop connection in the database
     await dataService.createShopConnection(shopId, shopDomain, shopUrl, token);
     
-    console.log(`✅ Connexion enregistrée pour ${shopDomain}`);
+    console.log(`✅ Connection saved for ${shopDomain}`);
     
     return json({
       success: 'ok',
@@ -37,15 +37,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
     
   } catch (error) {
-    console.error(`❌ Erreur lors de l'enregistrement de la connexion:`, error);
+    console.error(`❌ Error while saving the connection:`, error);
     
-    // On retourne quand même les données même si l'enregistrement échoue
+    // Return the data anyway even if saving fails
     return json({
       success: 'ok',
       shopDomain,
       token,
       version,
-      warning: 'Connexion établie mais enregistrement échoué'
+      warning: 'Connection established but saving failed'
     });
   }
 };

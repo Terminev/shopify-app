@@ -31,10 +31,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   );
   products = applyNodeSideFilters(products, filters);
 
-  // Récupérer les définitions des metaobject definitions pour enrichir les meta fields
+  // Retrieve metaobject definitions to enrich meta fields
   const metaobjectDefinitions = await getMetaobjectDefinitions(adminUrl, token);
 
-  // Pagination dynamique
+  // Dynamic pagination
   const url = new URL(request.url);
   const params = url.searchParams;
   const page = Math.max(1, parseInt(params.get("page") || "1", 10));
@@ -51,10 +51,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     page * pageSize,
   );
 
-  // Transformer les produits pour ne garder que les champs essentiels
+  // Transform products to keep only essential fields
   const simplifiedProducts = await Promise.all(
     paginatedProducts.map(async (product: any) => {
-      // Extraire les métadonnées essentielles
+      // Extract essential metafields
       const metafields =
         product.metafields?.edges?.map((edge: any) => edge.node) || [];
       const shortDescription = metafields.find(
@@ -64,22 +64,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         (m: any) => m.key === "technical" && m.namespace === "specs",
       )?.value;
 
-      // Extraire les variantes (SKU, barcode)
+      // Extract variants (SKU, barcode)
       const variants =
         product.variants?.edges?.map((edge: any) => edge.node) || [];
       const firstVariant = variants[0] || {};
 
-      // Extraire les images
+      // Extract images
       const images = product.images?.edges?.map((edge: any) => edge.node) || [];
 
-      // Récupérer toutes les meta taxonomies résolues
+      // Retrieve all resolved meta taxonomies
       const allMetaTaxonomies = await getProductMetaTaxonomies(
         product,
         adminUrl,
         token,
       );
 
-      // Filtrer seulement les champs de catégorie (namespace 'shopify')
+      // Filter only category fields (namespace 'shopify')
       const categoryMetaFields = Object.entries(allMetaTaxonomies)
         .filter(([key, value]: [string, any]) => value.namespace === "shopify")
         .map(([key, value]: [string, any]) => ({
@@ -89,7 +89,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           namespace: value.namespace,
         }));
 
-      // Enrichir les meta fields avec les informations des définitions
+      // Enrich meta fields with definition information
       const enrichedCategoryMetaFields = enrichMetaFieldsWithDefinitions(
         categoryMetaFields,
         metaobjectDefinitions
@@ -114,11 +114,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           id: product.category?.id,
           name: product.category?.name,
         },
-        // Meta taxonomies de catégorie (champs automatiques) avec valeurs résolues et définitions enrichies
+        // Category meta taxonomies (automatic fields) with resolved values and enriched definitions
         category_meta_fields: enrichedCategoryMetaFields,
       };
 
-      // Ajouter les meta taxonomies complètes si demandé
+      // Add complete meta taxonomies if requested
       if (!excludeMetaTaxonomies) {
         simplifiedProduct.meta_taxonomies = allMetaTaxonomies;
       }

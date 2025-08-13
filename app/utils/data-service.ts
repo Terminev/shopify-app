@@ -1,4 +1,4 @@
-// Types pour les données réelles de ton app
+// Types for your app's actual data
 export interface ShopConnection {
   shop_id: string;
   shop_domain: string;
@@ -26,7 +26,7 @@ export interface ProductSyncData {
   sync_direction: 'shopify_to_saas' | 'saas_to_shopify';
 }
 
-// Service pour gérer les données (version simple sans base de données)
+// Service to manage data (simple version without a database)
 export class DataService {
   private static instance: DataService;
   
@@ -39,11 +39,11 @@ export class DataService {
     return DataService.instance;
   }
 
-  // Récupérer les données de connexion d'une boutique
+  // Retrieve shop connection data
   async getShopConnection(shopId: string): Promise<ShopConnection | null> {
-    console.log(`🔍 Récupération des données de connexion pour boutique ${shopId}`);
+    console.log(`🔍 Retrieving connection data for shop ${shopId}`);
     
-    // Simulation - retourne des données factices
+    // Simulation - returns mock data
     return {
       shop_id: shopId,
       shop_domain: "example.myshopify.com",
@@ -54,11 +54,11 @@ export class DataService {
     };
   }
 
-  // Récupérer les logs de synchronisation d'une boutique
+  // Retrieve synchronization logs for a shop
   async getSyncLogs(shopId: string): Promise<SyncLog[]> {
-    console.log(`📊 Récupération des logs de sync pour boutique ${shopId}`);
+    console.log(`📊 Retrieving sync logs for shop ${shopId}`);
     
-    // Simulation - retourne des logs factices
+    // Simulation - returns mock logs
     return [
       {
         id: "1",
@@ -79,11 +79,11 @@ export class DataService {
     ];
   }
 
-  // Récupérer les données de produits synchronisés
+  // Retrieve synchronized product data
   async getProductSyncData(shopId: string): Promise<ProductSyncData[]> {
-    console.log(`📦 Récupération des données de produits pour boutique ${shopId}`);
+    console.log(`📦 Retrieving product data for shop ${shopId}`);
     
-    // Simulation - retourne des produits factices
+    // Simulation - returns mock products
     return [
       {
         shopify_product_id: "gid://shopify/Product/123",
@@ -95,27 +95,27 @@ export class DataService {
     ];
   }
 
-  // Supprimer toutes les données d'une boutique
+  // Delete all data for a shop
   async deleteShopData(shopId: string): Promise<boolean> {
-    console.log(`🗑️ Suppression des données pour boutique ${shopId}`);
+    console.log(`🗑️ Deleting data for shop ${shopId}`);
     
-    // Simulation - supprime toujours avec succès
-    console.log(`✅ Données supprimées pour boutique ${shopId}`);
+    // Simulation - always deletes successfully
+    console.log(`✅ Data deleted for shop ${shopId}`);
     return true;
   }
 
-  // Supprimer les données d'un client spécifique
+  // Delete data for a specific customer
   async deleteCustomerData(customerId: string, shopId: string): Promise<boolean> {
-    console.log(`🗑️ Suppression des données client ${customerId} de la boutique ${shopId}`);
+    console.log(`🗑️ Deleting customer data ${customerId} for shop ${shopId}`);
     
-    // Simulation - supprime toujours avec succès
-    console.log(`✅ Données client supprimées`);
+    // Simulation - always deletes successfully
+    console.log(`✅ Customer data deleted`);
     return true;
   }
 
-  // Générer un rapport GDPR pour un client
+  // Generate a GDPR report for a customer
   async generateGDPRReport(customerId: string, shopId: string): Promise<any> {
-    console.log(`📋 Génération rapport GDPR pour client ${customerId} de boutique ${shopId}`);
+    console.log(`📋 Generating GDPR report for customer ${customerId} of shop ${shopId}`);
     
     const shopConnection = await this.getShopConnection(shopId);
     const syncLogs = await this.getSyncLogs(shopId);
@@ -156,23 +156,23 @@ export class DataService {
     };
   }
 
-  // Méthodes utilitaires pour ton app
+  // Utility methods for your app
 
-  // Enregistrer une connexion boutique
+  // Save a shop connection
   async createShopConnection(shopId: string, shopDomain: string, shopUrl: string, accessToken: string): Promise<void> {
-    console.log(`✅ Connexion boutique enregistrée: ${shopDomain}`);
-    // Simulation - ne fait rien en réalité
+    console.log(`✅ Shop connection saved: ${shopDomain}`);
+    // Simulation - does nothing in reality
   }
 
-  // Enregistrer un log de synchronisation
+  // Save a synchronization log
   async createSyncLog(shopId: string, syncType: 'import' | 'export', productsCount: number, status: 'success' | 'error' | 'partial', errorMessage?: string): Promise<void> {
-    console.log(`✅ Log de sync enregistré: ${syncType} - ${productsCount} produits`);
-    // Simulation - ne fait rien en réalité
+    console.log(`✅ Sync log saved: ${syncType} - ${productsCount} products`);
+    // Simulation - does nothing in reality
   }
 
-  // Enregistrer un produit synchronisé
+  // Save a synchronized product
   async createProductSync(shopId: string, shopifyProductId: string, syncDirection: 'shopify_to_saas' | 'saas_to_shopify', saasProductId?: string): Promise<void> {
-    console.log(`✅ Produit synchronisé enregistré: ${shopifyProductId}`);
-    // Simulation - ne fait rien en réalité
+    console.log(`✅ Synchronized product saved: ${shopifyProductId}`);
+    // Simulation - does nothing in reality
   }
 } 

@@ -10,13 +10,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (!shopId || !shopifyProductId || !syncDirection) {
       return json({ 
         success: false, 
-        error: "Paramètres manquants: shopId, shopifyProductId, syncDirection requis" 
+        error: "Missing parameters: shopId, shopifyProductId, and syncDirection are required" 
       }, { status: 400 });
     }
     
     const dataService = DataService.getInstance();
     
-    // Enregistrer le produit synchronisé
+    // Save the synchronized product
     await dataService.createProductSync(
       shopId,
       shopifyProductId,
@@ -24,18 +24,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       syncDirection as 'shopify_to_saas' | 'saas_to_shopify'
     );
     
-    console.log(`✅ Produit sync enregistré: ${shopifyProductId} - ${syncDirection}`);
+    console.log(`✅ Synced product saved: ${shopifyProductId} - ${syncDirection}`);
     
     return json({
       success: true,
-      message: "Produit synchronisé enregistré"
+      message: "Synchronized product saved"
     });
     
   } catch (error) {
-    console.error("❌ Erreur lors de l'enregistrement du produit sync:", error);
+    console.error("❌ Error while saving the synced product:", error);
     return json({ 
       success: false, 
-      error: "Erreur interne" 
+      error: "Internal error" 
     }, { status: 500 });
   }
 }; 

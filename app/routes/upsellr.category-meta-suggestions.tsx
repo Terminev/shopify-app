@@ -19,7 +19,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const params = url.searchParams;
   const categoryName = params.get('category');
-  const minFrequency = parseFloat(params.get('min_frequency') || '0.1'); // Fréquence minimale pour inclure une suggestion
+  const minFrequency = parseFloat(params.get('min_frequency') || '0.1');
 
   if (!categoryName) {
     return json({ success: false, error: "Le paramètre 'category' est requis" }, { status: 400 });

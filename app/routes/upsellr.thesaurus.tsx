@@ -7,9 +7,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   if (shopifyAuth.error) {
     return json({ success: false, error: shopifyAuth.error.message }, { status: shopifyAuth.error.status });
   }
-  const { token, shopDomain, adminUrl } = shopifyAuth;
+  const { token, adminUrl } = shopifyAuth;
 
-  // Appel à l'API Shopify pour récupérer les produits (pour extraire brands et catégories)
+  // Call Shopify API to fetch products (to extract brands and categories)
   const productsQuery = `#graphql\n    query getAllProducts($first: Int!) {\n      products(first: $first) {\n        edges {\n          node {\n            id\n            vendor\n            productType\n          }\n        }\n      }\n    }`;
 
   const response = await fetch(adminUrl, {
@@ -25,7 +25,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return json(
       {
         success: false,
-        error: "Erreur Shopify API",
+        error: "Shopify API error",
       },
       { status: 502 },
     );
@@ -35,7 +35,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const products =
     productsData.data?.products?.edges?.map((edge: any) => edge.node) || [];
 
-  // Extraire les brands (vendors distincts)
+  // Extract brands (distinct vendors)
   const vendorSet = new Set<string>();
   products.forEach((p: any) => {
     if (p.vendor) vendorSet.add(p.vendor);
@@ -45,7 +45,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     label: vendor,
   }));  
 
-  // Extraire les catégories (productType distincts)
+  // Extract categories (distinct productTypes)
   const categorySet = new Set<string>();
   products.forEach((p: any) => {
     if (p.productType) categorySet.add(p.productType);

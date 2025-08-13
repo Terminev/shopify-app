@@ -10,13 +10,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (!shopId || !syncType || !productsCount || !status) {
       return json({ 
         success: false, 
-        error: "Paramètres manquants: shopId, syncType, productsCount, status requis" 
+        error: "Missing parameters: shopId, syncType, productsCount, status required" 
       }, { status: 400 });
     }
     
     const dataService = DataService.getInstance();
     
-    // Enregistrer le log de synchronisation
+    // Save the synchronization log
     await dataService.createSyncLog(
       shopId,
       syncType as 'import' | 'export',
@@ -25,18 +25,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       errorMessage
     );
     
-    console.log(`✅ Log de sync enregistré: ${syncType} - ${productsCount} produits - ${status}`);
+    console.log(`✅ Sync log saved: ${syncType} - ${productsCount} products - ${status}`);
     
     return json({
       success: true,
-      message: "Log de synchronisation enregistré"
+      message: "Synchronization log saved"
     });
     
   } catch (error) {
-    console.error("❌ Erreur lors de l'enregistrement du log de sync:", error);
+    console.error("❌ Error while saving sync log:", error);
     return json({ 
       success: false, 
-      error: "Erreur interne" 
+      error: "Internal error" 
     }, { status: 500 });
   }
 }; 
