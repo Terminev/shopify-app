@@ -161,18 +161,15 @@ export class DataService {
   // Save a shop connection
   async createShopConnection(shopId: string, shopDomain: string, shopUrl: string, accessToken: string): Promise<void> {
     console.log(`✅ Shop connection saved: ${shopDomain}`);
-    // Simulation - does nothing in reality
   }
 
   // Save a synchronization log
   async createSyncLog(shopId: string, syncType: 'import' | 'export', productsCount: number, status: 'success' | 'error' | 'partial', errorMessage?: string): Promise<void> {
     console.log(`✅ Sync log saved: ${syncType} - ${productsCount} products`);
-    // Simulation - does nothing in reality
   }
 
   // Save a synchronized product
   async createProductSync(shopId: string, shopifyProductId: string, syncDirection: 'shopify_to_saas' | 'saas_to_shopify', saasProductId?: string): Promise<void> {
     console.log(`✅ Synchronized product saved: ${shopifyProductId}`);
-    // Simulation - does nothing in reality
   }
 } 

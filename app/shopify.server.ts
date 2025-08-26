@@ -7,11 +7,11 @@ import {
 } from "@shopify/shopify-app-remix/server";
 
 const shopify = shopifyApp({
-  apiKey: process.env.SHOPIFY_API_KEY,
-  apiSecretKey: process.env.SHOPIFY_API_SECRET || "",
+  apiKey: process.env.SHOPIFY_API_KEY || "2022322134db5403bdd40384bf020a5c",
+  apiSecretKey: process.env.SHOPIFY_API_SECRET_KEY || "b886cee6f55b061de5c997236723da9f",
   apiVersion: ApiVersion.January25,
-  scopes: process.env.SCOPES?.split(","),
-  appUrl: process.env.SHOPIFY_APP_URL || "",
+  scopes: ["read_metaobjects"],
+  appUrl: "https://plugin.upsellr.io",
   authPathPrefix: "/auth",
   distribution: AppDistribution.AppStore,
   sessionStorage: new MemorySessionStorage(),

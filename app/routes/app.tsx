@@ -14,7 +14,63 @@ import polarisDe from "@shopify/polaris/locales/de.json";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
-function detectLang(request: Request): 'en' | 'fr' | 'es' | 'it' | 'de' {
+// Function to get shop language from Shopify API
+async function getShopLanguage(adminUrl: string, token: string): Promise<string> {
+  try {
+    const query = `
+      query {
+        shop {
+          primaryDomain {
+            locale
+          }
+        }
+      }
+    `;
+
+    const response = await fetch(adminUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Shopify-Access-Token': token,
+      },
+      body: JSON.stringify({ query }),
+    });
+
+    if (!response.ok) {
+      return 'en';
+    }
+
+    const data = await response.json();
+    if (data.errors) {
+      return 'en';
+    }
+
+    return data.data?.shop?.primaryDomain?.locale || 'en';
+  } catch (error) {
+    console.error('❌ Error while retrieving shop language:', error);
+    return 'en';
+  }
+}
+
+function mapShopifyLocaleToLang(locale: string): 'en' | 'fr' | 'es' | 'it' | 'de' {
+  const lang = locale.toLowerCase().split('-')[0];
+  if (["fr","es","it","de"].includes(lang)) return lang as 'fr' | 'es' | 'it' | 'de';
+  return 'en';
+}
+
+// Function to detect user interface language from URL parameters
+function detectUserLanguage(request: Request): 'en' | 'fr' | 'es' | 'it' | 'de' {
+  const url = new URL(request.url);
+  const locale = url.searchParams.get('locale');
+  
+  // Si on a un paramètre locale dans l'URL, on l'utilise
+  if (locale) {
+    const lang = locale.toLowerCase().split('-')[0];
+    if (["fr","es","it","de"].includes(lang)) return lang as 'fr' | 'es' | 'it' | 'de';
+    return 'en';
+  }
+  
+  // Fallback sur l'en-tête Accept-Language
   const accept = request.headers.get("accept-language") || "";
   const lang = accept.toLowerCase().split(',')[0].split('-')[0];
   if (["fr","es","it","de"].includes(lang)) return lang as 'fr' | 'es' | 'it' | 'de';
@@ -22,16 +78,48 @@ function detectLang(request: Request): 'en' | 'fr' | 'es' | 'it' | 'de' {
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const shopifyAccessToken = session.accessToken;
-  const shopDomain = session.shop;
-  const lang = detectLang(request);
-  let polarisTranslations: any = polarisEn;
-  if (lang === 'fr') polarisTranslations = polarisFr;
-  else if (lang === 'es') polarisTranslations = polarisEs;
-  else if (lang === 'it') polarisTranslations = polarisIt;
-  else if (lang === 'de') polarisTranslations = polarisDe;
-  return json({ shopifyAccessToken, shopDomain, lang, polarisTranslations });
+  try {
+    const { session } = await authenticate.admin(request);
+    const shopifyAccessToken = session.accessToken;
+    const shopDomain = session.shop;
+    
+    // Priorité 1: Langue de l'interface utilisateur (Accept-Language header)
+    // Priorité 2: Langue de la boutique Shopify (fallback)
+    let lang: 'en' | 'fr' | 'es' | 'it' | 'de' = detectUserLanguage(request);
+    
+    // Si on a accès à l'API Shopify, on peut utiliser la langue de la boutique comme fallback
+    if (shopDomain && shopifyAccessToken) {
+      try {
+        const adminUrl = `https://${shopDomain}/admin/api/2025-07/graphql.json`;
+        const shopifyLocale = await getShopLanguage(adminUrl, shopifyAccessToken);
+        const shopLang = mapShopifyLocaleToLang(shopifyLocale);
+        
+        // Si la langue utilisateur est l'anglais (défaut), on utilise la langue de la boutique
+        if (lang === 'en' && shopLang !== 'en') {
+          lang = shopLang;
+        }
+      } catch (error) {
+        console.error('❌ Error getting shop language, using user language:', error);
+      }
+    }
+    
+    let polarisTranslations: any = polarisEn;
+    if (lang === 'fr') polarisTranslations = polarisFr;
+    else if (lang === 'es') polarisTranslations = polarisEs;
+    else if (lang === 'it') polarisTranslations = polarisIt;
+    else if (lang === 'de') polarisTranslations = polarisDe;
+    
+    return json({ shopifyAccessToken, shopDomain, lang, polarisTranslations });
+  } catch (error) {
+    console.error('❌ Authentication error:', error);
+    // En cas d'erreur d'authentification, rediriger vers la page de login
+    throw new Response("Authentication required", { 
+      status: 401,
+      headers: {
+        "Location": "/auth/login"
+      }
+    });
+  }
 };
 
 export default function App() {
