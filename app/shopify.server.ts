@@ -5,13 +5,16 @@ import {
   AppDistribution,
   shopifyApp,
 } from "@shopify/shopify-app-remix/server";
+import dotenv from "dotenv";
+
+dotenv.config({ path: process.env.DOTENV_CONFIG_PATH || ".env" });
 
 const shopify = shopifyApp({
-  apiKey: process.env.SHOPIFY_API_KEY || "2022322134db5403bdd40384bf020a5c",
-  apiSecretKey: process.env.SHOPIFY_API_SECRET_KEY || "b886cee6f55b061de5c997236723da9f",
+  apiKey: process.env.SHOPIFY_API_KEY || "",
+  apiSecretKey: process.env.SHOPIFY_API_SECRET_KEY || "",
   apiVersion: ApiVersion.January25,
   scopes: ["read_metaobjects"],
-  appUrl: "https://plugin.upsellr.io",
+  appUrl: process.env.SHOPIFY_APP_URL || "https://plugin.upsellr.io",
   authPathPrefix: "/auth",
   distribution: AppDistribution.AppStore,
   sessionStorage: new MemorySessionStorage(),
