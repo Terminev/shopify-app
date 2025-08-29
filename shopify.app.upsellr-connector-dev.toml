@@ -1,0 +1,31 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "4e48494ce0c61640c168a540f69a0043"
+name = "upsellr-connector-dev"
+handle = "upsellr-connector-dev"
+application_url = "https://plugin-dev.upsellr.io"
+embedded = true
+
+[build]
+include_config_on_deploy = true
+
+[webhooks]
+api_version = "2025-07"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "/webhooks/app/uninstalled"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/scopes_update" ]
+  uri = "/webhooks/app/scopes_update"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_metaobject_definitions,read_metaobjects,write_products"
+
+[auth]
+redirect_urls = ["https://plugin-dev.upsellr.io/auth/callback", "https://plugin-dev.upsellr.io/auth/shopify/callback", "https://plugin-dev.upsellr.io/api/auth/callback"]
+
+[pos]
+embedded = false
