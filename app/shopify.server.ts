@@ -6,15 +6,40 @@ import {
   shopifyApp,
 } from "@shopify/shopify-app-remix/server";
 import dotenv from "dotenv";
+import { parse } from "toml";
+import { readFileSync } from "fs";
+import { join } from "path";
 
 dotenv.config({ path: process.env.DOTENV_CONFIG_PATH || ".env" });
 
+// Charger le fichier de configuration Shopify approprié
+const configFile = process.env.SHOPIFY_CONFIG_FILE || "shopify.app.toml";
+const configPath = join(process.cwd(), configFile);
+let shopifyConfig;
+
+try {
+  const configContent = readFileSync(configPath, "utf-8");
+  shopifyConfig = parse(configContent);
+} catch (error) {
+  shopifyConfig = null;
+}
+
+const apiKey = shopifyConfig?.client_id || process.env.SHOPIFY_API_KEY || "";
+const apiSecretKey = process.env.SHOPIFY_API_SECRET_KEY || "";
+const appUrl = shopifyConfig?.application_url || process.env.SHOPIFY_APP_URL || "https://plugin.upsellr.io";
+const scopes = shopifyConfig?.access_scopes?.scopes?.split(",").map((s: string) => s.trim()) || ["read_metaobject_definitions", "read_metaobjects", "write_products"];
+
+console.log(`🔑 API Key: ${apiKey}`);
+console.log(`🔐 API Secret Key: ${apiSecretKey ? "***" : "NON DÉFINI"}`);
+console.log(`🌐 App URL: ${appUrl}`);
+console.log(`📋 Scopes: ${scopes.join(", ")}`);
+
 const shopify = shopifyApp({
-  apiKey: process.env.SHOPIFY_API_KEY || "",
-  apiSecretKey: process.env.SHOPIFY_API_SECRET_KEY || "",
+  apiKey,
+  apiSecretKey,
   apiVersion: ApiVersion.January25,
-  scopes: ["read_metaobjects"],
-  appUrl: process.env.SHOPIFY_APP_URL || "https://plugin.upsellr.io",
+  scopes,
+  appUrl,
   authPathPrefix: "/auth",
   distribution: AppDistribution.AppStore,
   sessionStorage: new MemorySessionStorage(),

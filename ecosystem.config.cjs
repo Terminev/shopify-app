@@ -33,6 +33,7 @@ module.exports = {
         PORT: "3000",
         APP_URL: process.env.APP_URL_DEV,
         NODE_ENV: "production",
+        SHOPIFY_CONFIG_FILE: "shopify.app.upsellr-connector-dev.toml",
       },
     },
   ],
