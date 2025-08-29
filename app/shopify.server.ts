@@ -12,7 +12,6 @@ import { join } from "path";
 
 dotenv.config({ path: process.env.DOTENV_CONFIG_PATH || ".env" });
 
-// Charger le fichier de configuration Shopify approprié
 const configFile = process.env.SHOPIFY_CONFIG_FILE || "shopify.app.toml";
 const configPath = join(process.cwd(), configFile);
 let shopifyConfig;
