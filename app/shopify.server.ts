@@ -29,11 +29,6 @@ const apiSecretKey = process.env.SHOPIFY_API_SECRET_KEY || "";
 const appUrl = shopifyConfig?.application_url || process.env.SHOPIFY_APP_URL || "https://plugin.upsellr.io";
 const scopes = shopifyConfig?.access_scopes?.scopes?.split(",").map((s: string) => s.trim()) || ["read_metaobject_definitions", "read_metaobjects", "write_products"];
 
-console.log(`🔑 API Key: ${apiKey}`);
-console.log(`🔐 API Secret Key: ${apiSecretKey ? "***" : "NON DÉFINI"}`);
-console.log(`🌐 App URL: ${appUrl}`);
-console.log(`📋 Scopes: ${scopes.join(", ")}`);
-
 const shopify = shopifyApp({
   apiKey,
   apiSecretKey,
